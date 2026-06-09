@@ -1,4 +1,9 @@
-import yahooFinance from 'yahoo-finance2';
+import YahooFinanceClass from 'yahoo-finance2';
+
+// yahoo-finance2 v3 default export is the YahooFinance class which must be instantiated.
+const yahooFinance = typeof YahooFinanceClass === 'function'
+  ? new YahooFinanceClass({ suppressNotices: ['ripHistorical', 'yahooSurvey'] })
+  : YahooFinanceClass;
 
 /**
  * Standardizes Indian stock symbols by appending '.NS' (NSE) if no exchange suffix is present.
@@ -50,21 +55,21 @@ export async function fetchStockData(rawSymbol, interval = '1d', yearsLimit = 5)
   }
 
   try {
-    // Disable historical cache/safety checking if it interferes
-    yahooFinance.setGlobalConfig({
-      validation: { logErrors: false }
-    });
-
     if (interval === '1d') {
       const queryOptions = {
         period1: startDate,
         period2: now,
         interval: '1d'
       };
-      const result = await yahooFinance.historical(symbol, queryOptions);
       
+      // Using chart endpoint instead of deprecated historical endpoint
+      const result = await yahooFinance.chart(symbol, queryOptions);
+      if (!result || !result.quotes || result.quotes.length === 0) {
+        throw new Error(`No quotes returned for chart interval ${interval}`);
+      }
+
       // Filter and format the data
-      const sortedDaily = result
+      const sortedDaily = result.quotes
         .filter(candle => candle.open && candle.high && candle.low && candle.close)
         .map(candle => {
           const d = new Date(candle.date);
