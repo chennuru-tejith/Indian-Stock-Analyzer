@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { createChart, ColorType } from 'lightweight-charts';
 import { Maximize2 } from 'lucide-react';
 
-export default function ChartContainer({ candles, selectedSymbol, interval }) {
+export default function ChartContainer({ candles, selectedSymbol, interval, takeProfit, stopLoss }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -157,6 +157,53 @@ export default function ChartContainer({ candles, selectedSymbol, interval }) {
       candlestickSeries.setMarkers(markers);
     }
 
+    // 6. Draw Stop Loss & Take Profit Target Lines for the most recent active signal
+    const lastSignaledCandle = [...candles]
+      .reverse()
+      .find(c => (c.signal === 'BUY' || c.signal === 'SELL') && (c.confidence === 'HIGH' || c.confidence === 'MEDIUM'));
+
+    if (lastSignaledCandle && takeProfit && stopLoss) {
+      const entryPrice = lastSignaledCandle.close;
+      const isBuy = lastSignaledCandle.signal === 'BUY';
+      
+      const slPrice = isBuy 
+        ? entryPrice * (1 - stopLoss / 100) 
+        : entryPrice * (1 + stopLoss / 100);
+      const tpPrice = isBuy 
+        ? entryPrice * (1 + takeProfit / 100) 
+        : entryPrice * (1 - takeProfit / 100);
+
+      // Create Entry Line
+      candlestickSeries.createPriceLine({
+        price: entryPrice,
+        color: '#3b82f6',
+        lineWidth: 1,
+        lineStyle: 2, // Dashed
+        axisLabelVisible: true,
+        title: `Entry (${lastSignaledCandle.signal})`
+      });
+
+      // Create Take Profit Line
+      candlestickSeries.createPriceLine({
+        price: tpPrice,
+        color: '#10b981',
+        lineWidth: 1.5,
+        lineStyle: 3, // LargeDashed
+        axisLabelVisible: true,
+        title: `Target TP (+${isBuy ? '' : '-'}${takeProfit}%)`
+      });
+
+      // Create Stop Loss Line
+      candlestickSeries.createPriceLine({
+        price: slPrice,
+        color: '#ef4444',
+        lineWidth: 1.5,
+        lineStyle: 3, // LargeDashed
+        axisLabelVisible: true,
+        title: `Target SL (${isBuy ? '-' : '+'}${stopLoss}%)`
+      });
+    }
+
     // Adjust chart time scale to fit data
     chart.timeScale().fitContent();
 
@@ -167,7 +214,7 @@ export default function ChartContainer({ candles, selectedSymbol, interval }) {
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, interval]);
+  }, [candles, interval, takeProfit, stopLoss]);
 
   // Extract latest prices
   const latestCandle = candles[candles.length - 1];

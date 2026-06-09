@@ -17,29 +17,57 @@ export default function StockSelector({ selectedSymbol, onSelectSymbol }) {
   const [stocks, setStocks] = useState(DEFAULT_STOCKS);
   const [quotes, setQuotes] = useState({});
 
-  // Fetch prices for default list on mount
+  // Fetch prices for active list of stocks
   useEffect(() => {
     async function fetchAllQuotes() {
-      const newQuotes = {};
-      for (const stock of DEFAULT_STOCKS) {
-        try {
-          const res = await fetch(`http://localhost:5000/api/stock/${stock.symbol}/quote`);
-          const data = await res.json();
-          if (data.success && data.quote) {
-            newQuotes[stock.symbol] = data.quote;
+      try {
+        const fetchPromises = stocks.map(async (stock) => {
+          try {
+            const res = await fetch(`http://localhost:5000/api/stock/${stock.symbol}/quote`);
+            const data = await res.json();
+            if (data.success && data.quote) {
+              return { symbol: stock.symbol, quote: data.quote };
+            }
+          } catch (e) {
+            console.error('Error fetching quote for symbol:', stock.symbol, e);
           }
-        } catch (e) {
-          console.error('Error fetching quote for list:', stock.symbol, e);
-        }
+          return null;
+        });
+
+        const results = await Promise.all(fetchPromises);
+        const newQuotes = { ...quotes };
+        results.forEach(res => {
+          if (res) {
+            newQuotes[res.symbol] = res.quote;
+          }
+        });
+        setQuotes(newQuotes);
+      } catch (err) {
+        console.error('Error in fetchAllQuotes:', err);
       }
-      setQuotes(newQuotes);
     }
     
     fetchAllQuotes();
     // Poll quotes every 15 seconds
     const interval = setInterval(fetchAllQuotes, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [stocks]);
+
+  // Helper to fetch quote immediately for a searched symbol
+  const fetchSingleQuoteImmediate = async (symbol) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/stock/${symbol}/quote`);
+      const data = await res.json();
+      if (data.success && data.quote) {
+        setQuotes(prev => ({
+          ...prev,
+          [symbol]: data.quote
+        }));
+      }
+    } catch (e) {
+      console.error('Error fetching immediate quote:', symbol, e);
+    }
+  };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -56,6 +84,7 @@ export default function StockSelector({ selectedSymbol, onSelectSymbol }) {
     if (!exists) {
       const newStock = { symbol, name: 'Custom stock query' };
       setStocks([newStock, ...stocks]);
+      fetchSingleQuoteImmediate(symbol);
       onSelectSymbol(symbol);
     } else {
       onSelectSymbol(symbol);

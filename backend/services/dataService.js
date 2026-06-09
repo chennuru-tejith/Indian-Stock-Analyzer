@@ -64,7 +64,7 @@ export async function fetchStockData(rawSymbol, interval = '1d', yearsLimit = 5)
       const result = await yahooFinance.historical(symbol, queryOptions);
       
       // Filter and format the data
-      return result
+      const sortedDaily = result
         .filter(candle => candle.open && candle.high && candle.low && candle.close)
         .map(candle => {
           const d = new Date(candle.date);
@@ -79,6 +79,8 @@ export async function fetchStockData(rawSymbol, interval = '1d', yearsLimit = 5)
           };
         })
         .sort((a, b) => a.timestamp - b.timestamp);
+
+      return deduplicateCandles(sortedDaily);
     } else {
       // Use chart endpoint for intraday data
       const queryOptions = {
@@ -92,7 +94,7 @@ export async function fetchStockData(rawSymbol, interval = '1d', yearsLimit = 5)
         throw new Error(`No quotes returned for chart interval ${interval}`);
       }
 
-      return result.quotes
+      const sortedIntraday = result.quotes
         .filter(candle => candle.open && candle.high && candle.low && candle.close)
         .map(candle => {
           const d = new Date(candle.date);
@@ -107,11 +109,26 @@ export async function fetchStockData(rawSymbol, interval = '1d', yearsLimit = 5)
           };
         })
         .sort((a, b) => a.time - b.time);
+
+      return deduplicateCandles(sortedIntraday);
     }
   } catch (error) {
     console.error(`Error fetching stock data for ${symbol}:`, error.message);
     throw new Error(`Failed to fetch data for ${symbol}: ${error.message}`);
   }
+}
+
+/**
+ * Deduplicates candle series by timestamp.
+ */
+function deduplicateCandles(candles) {
+  const seen = new Set();
+  return candles.filter(c => {
+    const key = String(c.time);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**

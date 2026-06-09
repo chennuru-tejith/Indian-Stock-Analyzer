@@ -223,7 +223,13 @@ export default function App() {
             </div>
           )}
 
-          <ChartContainer candles={candles} selectedSymbol={symbol} interval={timeframe} />
+          <ChartContainer 
+            candles={candles} 
+            selectedSymbol={symbol} 
+            interval={timeframe} 
+            takeProfit={takeProfit} 
+            stopLoss={stopLoss} 
+          />
 
           {/* Quick Technical Summary */}
           <div className="glass-panel" style={{ padding: '1.25rem' }}>
