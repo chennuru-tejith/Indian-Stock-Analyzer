@@ -1,0 +1,62 @@
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-height: 100vh; /* Lock page to viewport height to enable internal card scrolling */
+  overflow: hidden;
+  background-color: var(--bg-primary);
+}
+
+/* Scrollbar customization for panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--card-hover);
+}
+
+/* Animations */
+.spin-anim {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Utility classes */
+.signal-text {
+  font-weight: 600;
+}
+
+.price-up {
+  color: var(--color-bullish);
+}
+
+.price-down {
+  color: var(--color-bearish);
+}
+
+/* Layout overrides for responsiveness */
+@media (max-width: 1400px) {
+  .app-container {
+    max-height: none;
+    overflow-y: auto;
+  }
+  .dashboard-grid {
+    height: auto;
+    overflow-y: visible;
+  }
+}
