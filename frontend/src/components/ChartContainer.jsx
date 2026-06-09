@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType } from 'lightweight-charts';
-import { TrendingUp } from 'lucide-react';
+import TradingViewWidget from './TradingViewWidget';
+import { Activity, BarChart3, LineChart } from 'lucide-react';
 
 export default function ChartContainer({ 
   candles, 
@@ -13,9 +14,13 @@ export default function ChartContainer({
 }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
+  
+  // Chart Type: 'FUSION' (Custom indicator chart) | 'LIVE' (TradingView Embed)
+  const [chartType, setChartType] = useState('FUSION');
 
   useEffect(() => {
-    if (!chartContainerRef.current || candles.length === 0) return;
+    // Only initialize custom chart if FUSION type is active and we have candles
+    if (chartType !== 'FUSION' || !chartContainerRef.current || candles.length === 0) return;
 
     // Remove any existing chart first to avoid duplicates
     if (chartRef.current) {
@@ -137,26 +142,33 @@ export default function ChartContainer({
       color: c.close >= c.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'
     })));
 
-    // 5. Add markers for BUY and SELL signals
+    // 5. Add markers for BUY and SELL signals (Decluttered Crossover Logic)
     const markers = [];
-    candles.forEach(c => {
-      if (c.signal === 'BUY' && (c.confidence === 'HIGH' || c.confidence === 'MEDIUM')) {
+    candles.forEach((c, idx) => {
+      if (idx === 0) return;
+      const prev = candles[idx - 1];
+
+      // Trigger only on crossover to prevent overlapping clutter
+      const isNewBuy = c.signal === 'BUY' && prev.signal !== 'BUY' && (c.confidence === 'HIGH' || c.confidence === 'MEDIUM');
+      const isNewSell = c.signal === 'SELL' && prev.signal !== 'SELL' && (c.confidence === 'HIGH' || c.confidence === 'MEDIUM');
+
+      if (isNewBuy) {
         markers.push({
           time: c.time,
           position: 'belowBar',
           color: '#10b981',
           shape: 'arrowUp',
-          text: `BUY (${c.confidence})`,
-          size: 1.5
+          text: `BUY`,
+          size: 1.2
         });
-      } else if (c.signal === 'SELL' && (c.confidence === 'HIGH' || c.confidence === 'MEDIUM')) {
+      } else if (isNewSell) {
         markers.push({
           time: c.time,
           position: 'aboveBar',
           color: '#ef4444',
           shape: 'arrowDown',
-          text: `SELL (${c.confidence})`,
-          size: 1.5
+          text: `SELL`,
+          size: 1.2
         });
       }
     });
@@ -217,7 +229,7 @@ export default function ChartContainer({
       supportLevels.forEach((priceLevel, i) => {
         candlestickSeries.createPriceLine({
           price: priceLevel,
-          color: 'rgba(16, 185, 129, 0.45)',
+          color: 'rgba(16, 185, 129, 0.4)',
           lineWidth: 1,
           lineStyle: 1, // Dotted
           axisLabelVisible: true,
@@ -231,7 +243,7 @@ export default function ChartContainer({
       resistanceLevels.forEach((priceLevel, i) => {
         candlestickSeries.createPriceLine({
           price: priceLevel,
-          color: 'rgba(239, 68, 68, 0.45)',
+          color: 'rgba(239, 68, 68, 0.4)',
           lineWidth: 1,
           lineStyle: 1, // Dotted
           axisLabelVisible: true,
@@ -250,7 +262,7 @@ export default function ChartContainer({
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, interval, takeProfit, stopLoss, supportLevels, resistanceLevels]);
+  }, [candles, interval, takeProfit, stopLoss, supportLevels, resistanceLevels, chartType]);
 
   // Extract latest prices
   const latestCandle = candles[candles.length - 1];
@@ -285,24 +297,46 @@ export default function ChartContainer({
           )}
         </div>
 
-        <div className="chart-legend">
-          <div className="legend-item">
-            <span className="legend-dot" style={{ backgroundColor: '#3b82f6' }}></span>
-            <span>EMA 20</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* Custom Indicator Chart vs Live TradingView Chart Toggle */}
+          <div className="timeframe-container">
+            <button
+              onClick={() => setChartType('FUSION')}
+              className={`timeframe-btn ${chartType === 'FUSION' ? 'active' : ''}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+            >
+              <BarChart3 size={12} />
+              Fusion Indicators
+            </button>
+            <button
+              onClick={() => setChartType('LIVE')}
+              className={`timeframe-btn ${chartType === 'LIVE' ? 'active' : ''}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+            >
+              <LineChart size={12} />
+              TradingView Live
+            </button>
           </div>
-          <div className="legend-item">
-            <span className="legend-dot" style={{ backgroundColor: '#f59e0b' }}></span>
-            <span>SMA 200</span>
-          </div>
-          <div className="legend-item" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <div className="pulse-indicator" />
-            <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>Live Quote Feed</span>
-          </div>
+
+          {chartType === 'FUSION' && (
+            <div className="chart-legend" style={{ marginLeft: '0.5rem' }}>
+              <div className="legend-item">
+                <span className="legend-dot" style={{ backgroundColor: '#3b82f6' }}></span>
+                <span>EMA 20</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot" style={{ backgroundColor: '#f59e0b' }}></span>
+                <span>SMA 200</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="chart-wrapper" ref={chartContainerRef}>
-        {candles.length === 0 && (
+      <div className="chart-wrapper">
+        {chartType === 'LIVE' ? (
+          <TradingViewWidget symbol={selectedSymbol} interval={interval} />
+        ) : candles.length === 0 ? (
           <div style={{
             position: 'absolute',
             top: '50%',
@@ -313,6 +347,8 @@ export default function ChartContainer({
           }}>
             Loading market data and indicators...
           </div>
+        ) : (
+          <div ref={chartContainerRef} style={{ height: '100%', width: '100%' }} />
         )}
       </div>
     </div>
