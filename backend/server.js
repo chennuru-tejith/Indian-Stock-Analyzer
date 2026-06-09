@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { fetchStockData, fetchRealTimeQuote } from './services/dataService.js';
-import { enrichWithIndicators } from './services/indicatorService.js';
+import { fetchStockData, fetchRealTimeQuote, fetchStockNews } from './services/dataService.js';
+import { enrichWithIndicators, calculateSupportResistance } from './services/indicatorService.js';
 import { detectPatterns } from './services/patternService.js';
 import { generateSignals } from './services/signalService.js';
 import { runBacktest } from './services/backtestService.js';
@@ -33,20 +33,81 @@ app.get('/api/stock/:symbol/history', async (req, res) => {
   const { interval = '1d', years = 5 } = req.query;
 
   try {
+    // Fetch news sentiment first to pass to signals
+    const newsData = await fetchStockNews(symbol);
+    const newsSentimentScore = newsData ? newsData.sentimentScore : 50;
+
     const rawCandles = await fetchStockData(symbol, interval, Number(years));
     const enrichedCandles = enrichWithIndicators(rawCandles);
     const patternedCandles = detectPatterns(enrichedCandles);
-    const signaledCandles = generateSignals(patternedCandles);
+    const signaledCandles = generateSignals(patternedCandles, { newsSentimentScore });
 
     res.json({
       success: true,
       symbol: symbol.toUpperCase(),
       interval,
       count: signaledCandles.length,
-      candles: signaledCandles
+      candles: signaledCandles,
+      newsSentimentScore
     });
   } catch (error) {
     console.error(`Error in /api/stock/${symbol}/history:`, error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Route: GET /api/stock/:symbol/intelligence
+ */
+app.get('/api/stock/:symbol/intelligence', async (req, res) => {
+  const { symbol } = req.params;
+
+  try {
+    const newsData = await fetchStockNews(symbol);
+    
+    // Fetch 1 year of daily historical candles to compute support & resistance and range
+    const rawCandles = await fetchStockData(symbol, '1d', 1);
+    const enrichedCandles = enrichWithIndicators(rawCandles);
+    const patternedCandles = detectPatterns(enrichedCandles);
+    const signaledCandles = generateSignals(patternedCandles, { newsSentimentScore: newsData.sentimentScore });
+
+    const latestCandle = signaledCandles[signaledCandles.length - 1];
+    const { support, resistance } = calculateSupportResistance(signaledCandles);
+
+    // Calculate 52-week High and Low extremes
+    const highs = signaledCandles.map(c => c.high);
+    const lows = signaledCandles.map(c => c.low);
+    const yearlyHigh = Math.max(...highs);
+    const yearlyLow = Math.min(...lows);
+
+    // Map numerical score to friendly recommendation label
+    // Scale: Strong Buy (>=75), Buy (>=60), Hold (41-59), Sell (<=40), Strong Sell (<=25)
+    let label = 'HOLD';
+    if (latestCandle.score >= 75) label = 'STRONG BUY';
+    else if (latestCandle.score >= 60) label = 'BUY';
+    else if (latestCandle.score <= 25) label = 'STRONG SELL';
+    else if (latestCandle.score <= 40) label = 'SELL';
+
+    res.json({
+      success: true,
+      symbol: symbol.toUpperCase(),
+      price: latestCandle.close,
+      support,
+      resistance,
+      yearlyHigh,
+      yearlyLow,
+      unifiedScore: latestCandle.score,
+      recommendation: label,
+      newsSentiment: newsData.newsSentiment,
+      newsSentimentScore: newsData.sentimentScore,
+      newsMetrics: newsData.metrics,
+      articles: newsData.articles
+    });
+  } catch (error) {
+    console.error(`Error in /api/stock/${symbol}/intelligence:`, error.message);
     res.status(500).json({
       success: false,
       error: error.message

@@ -164,3 +164,107 @@ export async function fetchRealTimeQuote(rawSymbol) {
     throw new Error(`Failed to fetch quote for ${symbol}: ${error.message}`);
   }
 }
+
+/**
+ * Fetches latest news for a symbol and calculates sentiment.
+ * @param {string} rawSymbol - The stock symbol
+ * @returns {Promise<Object>} - News feed and sentiment ratings
+ */
+export async function fetchStockNews(rawSymbol) {
+  const symbol = formatSymbol(rawSymbol);
+  try {
+    const searchResult = await yahooFinance.search(symbol);
+    const articles = (searchResult.news || []).map(item => {
+      const title = item.title || '';
+      const publisher = item.publisher || 'Unknown';
+      const link = item.link || '#';
+      const time = item.providerPublishTime 
+        ? new Date(item.providerPublishTime * 1000).toISOString()
+        : new Date().toISOString();
+
+      // Simple Algorithmic Sentiment Analysis
+      const bullishKeywords = [
+        'gain', 'growth', 'profit', 'rise', 'surge', 'bullish', 'upgrade', 'higher', 
+        'record', 'high', 'advance', 'jump', 'recovery', 'beat', 'positive', 'strong', 
+        'up', 'outperform', 'partnership', 'expand', 'deal', 'buy', 'dividend'
+      ];
+      
+      const bearishKeywords = [
+        'loss', 'drop', 'fall', 'decline', 'bearish', 'downgrade', 'lower', 'low', 
+        'dip', 'plunge', 'cut', 'slump', 'negative', 'weak', 'down', 'underperform', 
+        'miss', 'slashed', 'debt', 'fine', 'lawsuit', 'probe', 'warn', 'sell'
+      ];
+
+      const cleanTitle = title.toLowerCase();
+      let bullishCount = 0;
+      let bearishCount = 0;
+
+      bullishKeywords.forEach(word => {
+        if (cleanTitle.includes(word)) bullishCount++;
+      });
+
+      bearishKeywords.forEach(word => {
+        if (cleanTitle.includes(word)) bearishCount++;
+      });
+
+      let sentiment = 'NEUTRAL';
+      if (bullishCount > bearishCount) {
+        sentiment = 'BULLISH';
+      } else if (bearishCount > bullishCount) {
+        sentiment = 'BEARISH';
+      }
+
+      return {
+        title,
+        publisher,
+        link,
+        time,
+        sentiment,
+        score: bullishCount - bearishCount
+      };
+    });
+
+    // Calculate aggregated sentiment score
+    let score = 50; // base score is neutral
+    let bullishArticles = 0;
+    let bearishArticles = 0;
+
+    articles.forEach(art => {
+      if (art.sentiment === 'BULLISH') {
+        score += 15;
+        bullishArticles++;
+      } else if (art.sentiment === 'BEARISH') {
+        score -= 15;
+        bearishArticles++;
+      }
+    });
+
+    score = Math.max(0, Math.min(100, score)); // clamp between 0 and 100
+    
+    let newsSentiment = 'NEUTRAL';
+    if (score > 60) newsSentiment = 'BULLISH';
+    if (score < 40) newsSentiment = 'BEARISH';
+
+    return {
+      symbol,
+      newsSentiment,
+      sentimentScore: score,
+      metrics: {
+        total: articles.length,
+        bullish: bullishArticles,
+        bearish: bearishArticles,
+        neutral: articles.length - (bullishArticles + bearishArticles)
+      },
+      articles
+    };
+  } catch (error) {
+    console.error(`Error fetching news for ${symbol}:`, error.message);
+    return {
+      symbol,
+      newsSentiment: 'NEUTRAL',
+      sentimentScore: 50,
+      metrics: { total: 0, bullish: 0, bearish: 0, neutral: 0 },
+      articles: []
+    };
+  }
+}

@@ -3,7 +3,8 @@ import StockSelector from './components/StockSelector';
 import ChartContainer from './components/ChartContainer';
 import SignalAlerts from './components/SignalAlerts';
 import BacktestResults from './components/BacktestResults';
-import { Sliders, RefreshCw, BarChart2, Activity, Play, CheckCircle } from 'lucide-react';
+import StockIntelligence from './components/StockIntelligence';
+import { Sliders, RefreshCw, BarChart2, Activity, Play, BrainCircuit } from 'lucide-react';
 import './App.css';
 
 export default function App() {
@@ -12,6 +13,13 @@ export default function App() {
   const [candles, setCandles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Tabs: 'INTELLIGENCE' | 'BACKTEST'
+  const [activeTab, setActiveTab] = useState('INTELLIGENCE');
+
+  // Intelligence State
+  const [intelligenceData, setIntelligenceData] = useState(null);
+  const [intelligenceLoading, setIntelligenceLoading] = useState(false);
 
   // Backtest parameters state
   const [stopLoss, setStopLoss] = useState(2.5);
@@ -39,6 +47,22 @@ export default function App() {
     }
   }, [symbol, timeframe]);
 
+  // Fetch stock intelligence
+  const fetchIntelligence = useCallback(async () => {
+    setIntelligenceLoading(true);
+    try {
+      const res = await fetch(`http://localhost:5000/api/stock/${symbol}/intelligence`);
+      const data = await res.json();
+      if (data.success) {
+        setIntelligenceData(data);
+      }
+    } catch (e) {
+      console.error('Error fetching intelligence report:', e);
+    } finally {
+      setIntelligenceLoading(false);
+    }
+  }, [symbol]);
+
   // Fetch backtest data
   const fetchBacktest = useCallback(async () => {
     setBacktestLoading(true);
@@ -57,35 +81,22 @@ export default function App() {
     }
   }, [symbol, timeframe, stopLoss, takeProfit, confidenceFilter]);
 
-  // Load data on settings change
+  // Load data on state changes
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    fetchIntelligence();
+  }, [symbol, timeframe, fetchData, fetchIntelligence]);
 
   useEffect(() => {
     fetchBacktest();
-  }, [fetchBacktest]);
+  }, [symbol, timeframe, stopLoss, takeProfit, confidenceFilter, fetchBacktest]);
 
   // Polling mechanism for live update
   useEffect(() => {
-    const isMarketHours = () => {
-      const now = new Date();
-      const day = now.getDay();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      const timeVal = hours * 60 + minutes;
-      
-      // Indian Market: Monday to Friday, 9:15 AM to 3:30 PM IST (555 to 930 minutes)
-      // Note: System timezone might be user local time, which is usually IST (+5:30) for Indian user
-      const isWeekday = day >= 1 && day <= 5;
-      const isMarketTime = timeVal >= 9 * 60 + 15 && timeVal <= 15 * 60 + 30;
-      return isWeekday && isMarketTime;
-    };
-
     const intervalId = setInterval(() => {
-      // Always allow refreshing in dev/test, but useful to auto-refresh for live quotes
       fetchData();
-    }, 20000); // Poll every 20 seconds
+      // Only refresh news/intelligence occasionally (every 60s) to avoid API rate limits
+    }, 20000);
 
     return () => clearInterval(intervalId);
   }, [fetchData]);
@@ -121,8 +132,8 @@ export default function App() {
           <div>
             <h1 className="brand-name">INDICATOR FUSION</h1>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.15rem' }}>
-              <span className="brand-tag">Candlestick Analyzer</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>v1.0.0</span>
+              <span className="brand-tag">Stock Intelligence</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>v1.1.0</span>
             </div>
           </div>
         </div>
@@ -229,6 +240,8 @@ export default function App() {
             interval={timeframe} 
             takeProfit={takeProfit} 
             stopLoss={stopLoss} 
+            supportLevels={intelligenceData?.support || []}
+            resistanceLevels={intelligenceData?.resistance || []}
           />
 
           {/* Quick Technical Summary */}
@@ -262,18 +275,45 @@ export default function App() {
           </div>
         </section>
 
-        {/* Right Column: Signal Alert Feeds & Backtest Performance */}
+        {/* Right Column: Toggleable Stock Intelligence vs Backtest */}
         <section className="right-column">
-          <SignalAlerts candles={candles} />
-          
+          <div className="glass-panel" style={{ display: 'flex', padding: '0.4rem', gap: '0.4rem', borderBottom: '1px solid var(--card-border)' }}>
+            <button 
+              className={`timeframe-btn ${activeTab === 'INTELLIGENCE' ? 'active' : ''}`}
+              style={{ flex: 1, padding: '0.6rem 0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              onClick={() => setActiveTab('INTELLIGENCE')}
+            >
+              <BrainCircuit size={14} />
+              Stock Intelligence
+            </button>
+            <button 
+              className={`timeframe-btn ${activeTab === 'BACKTEST' ? 'active' : ''}`}
+              style={{ flex: 1, padding: '0.6rem 0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              onClick={() => setActiveTab('BACKTEST')}
+            >
+              <BarChart2 size={14} />
+              Backtester
+            </button>
+          </div>
+
           <div style={{ flex: 1, minHeight: 0 }}>
-            {backtestLoading ? (
-              <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Running simulated historical backtests...
-              </div>
+            {activeTab === 'INTELLIGENCE' ? (
+              <StockIntelligence data={intelligenceData} loading={intelligenceLoading} />
             ) : (
-              <BacktestResults backtestData={backtestData} />
+              <div>
+                {backtestLoading ? (
+                  <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    Running simulated historical backtests...
+                  </div>
+                ) : (
+                  <BacktestResults backtestData={backtestData} />
+                )}
+              </div>
             )}
+          </div>
+
+          <div style={{ height: '300px' }}>
+            <SignalAlerts candles={candles} />
           </div>
         </section>
       </main>

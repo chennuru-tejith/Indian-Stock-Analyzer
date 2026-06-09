@@ -187,3 +187,90 @@ export function enrichWithIndicators(candles) {
     volSma20: volSma20[idx]
   }));
 }
+
+/**
+ * Identifies major Support and Resistance levels based on historical local peaks/troughs.
+ * @param {Array<Object>} candles - Standard OHLCV candles
+ * @returns {Object} - Arrays of nearest support and resistance levels
+ */
+export function calculateSupportResistance(candles) {
+  if (candles.length < 20) {
+    const closes = candles.map(c => c.close);
+    const max = Math.max(...closes);
+    const min = Math.min(...closes);
+    return { support: [min], resistance: [max] };
+  }
+
+  const pivots = [];
+  const N = 5; // Lookback/lookahead window for local pivots
+
+  for (let i = N; i < candles.length - N; i++) {
+    const currentHigh = candles[i].high;
+    const currentLow = candles[i].low;
+    let isPivotHigh = true;
+    let isPivotLow = true;
+
+    for (let j = i - N; j <= i + N; j++) {
+      if (j === i) continue;
+      if (candles[j].high > currentHigh) isPivotHigh = false;
+      if (candles[j].low < currentLow) isPivotLow = false;
+    }
+
+    if (isPivotHigh) {
+      pivots.push({ price: currentHigh, type: 'RESISTANCE' });
+    }
+    if (isPivotLow) {
+      pivots.push({ price: currentLow, type: 'SUPPORT' });
+    }
+  }
+
+  // If no pivots found, fall back to simple session high/low
+  if (pivots.length === 0) {
+    const highs = candles.map(c => c.high);
+    const lows = candles.map(c => c.low);
+    pivots.push({ price: Math.max(...highs), type: 'RESISTANCE' });
+    pivots.push({ price: Math.min(...lows), type: 'SUPPORT' });
+  }
+
+  // Cluster prices within 1.5% threshold to define solid levels
+  const threshold = 0.015;
+  const clustered = [];
+
+  pivots.forEach(p => {
+    let cluster = clustered.find(c => Math.abs(c.avgPrice - p.price) / c.avgPrice <= threshold && c.type === p.type);
+    if (cluster) {
+      cluster.prices.push(p.price);
+      cluster.avgPrice = cluster.prices.reduce((sum, val) => sum + val, 0) / cluster.prices.length;
+      cluster.strength += 1;
+    } else {
+      clustered.push({
+        avgPrice: p.price,
+        type: p.type,
+        prices: [p.price],
+        strength: 1
+      });
+    }
+  });
+
+  const currentPrice = candles[candles.length - 1].close;
+
+  // Filter levels relative to current price
+  const supports = clustered
+    .filter(c => c.avgPrice < currentPrice)
+    .map(c => c.avgPrice)
+    .sort((a, b) => b - a); // Nearest (highest) first
+
+  const resistances = clustered
+    .filter(c => c.avgPrice > currentPrice)
+    .map(c => c.avgPrice)
+    .sort((a, b) => a - b); // Nearest (lowest) first
+
+  // Add fallback if empty
+  if (supports.length === 0) supports.push(currentPrice * 0.95);
+  if (resistances.length === 0) resistances.push(currentPrice * 1.05);
+
+  return {
+    support: supports.slice(0, 3),
+    resistance: resistances.slice(0, 3)
+  };
+}

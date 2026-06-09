@@ -1,8 +1,16 @@
 import React, { useEffect, useRef } from 'react';
 import { createChart, ColorType } from 'lightweight-charts';
-import { Maximize2 } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 
-export default function ChartContainer({ candles, selectedSymbol, interval, takeProfit, stopLoss }) {
+export default function ChartContainer({ 
+  candles, 
+  selectedSymbol, 
+  interval, 
+  takeProfit, 
+  stopLoss,
+  supportLevels = [],
+  resistanceLevels = []
+}) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -204,6 +212,34 @@ export default function ChartContainer({ candles, selectedSymbol, interval, take
       });
     }
 
+    // 7. Draw Historical Support Lines (Green)
+    if (supportLevels && supportLevels.length > 0) {
+      supportLevels.forEach((priceLevel, i) => {
+        candlestickSeries.createPriceLine({
+          price: priceLevel,
+          color: 'rgba(16, 185, 129, 0.45)',
+          lineWidth: 1,
+          lineStyle: 1, // Dotted
+          axisLabelVisible: true,
+          title: `Support ${i + 1}`
+        });
+      });
+    }
+
+    // 8. Draw Historical Resistance Lines (Red)
+    if (resistanceLevels && resistanceLevels.length > 0) {
+      resistanceLevels.forEach((priceLevel, i) => {
+        candlestickSeries.createPriceLine({
+          price: priceLevel,
+          color: 'rgba(239, 68, 68, 0.45)',
+          lineWidth: 1,
+          lineStyle: 1, // Dotted
+          axisLabelVisible: true,
+          title: `Resistance ${i + 1}`
+        });
+      });
+    }
+
     // Adjust chart time scale to fit data
     chart.timeScale().fitContent();
 
@@ -214,7 +250,7 @@ export default function ChartContainer({ candles, selectedSymbol, interval, take
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, interval, takeProfit, stopLoss]);
+  }, [candles, interval, takeProfit, stopLoss, supportLevels, resistanceLevels]);
 
   // Extract latest prices
   const latestCandle = candles[candles.length - 1];
