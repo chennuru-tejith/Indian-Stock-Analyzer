@@ -16,6 +16,9 @@ export default function StockSelector({ selectedSymbol, onSelectSymbol }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [stocks, setStocks] = useState(DEFAULT_STOCKS);
   const [quotes, setQuotes] = useState({});
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   // Fetch prices for active list of stocks
   useEffect(() => {
@@ -53,6 +56,38 @@ export default function StockSelector({ selectedSymbol, onSelectSymbol }) {
     return () => clearInterval(interval);
   }, [stocks]);
 
+  // Debounced search for stocks
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    const delayDebounce = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(`http://localhost:5000/api/stock/search?q=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        if (data.success && data.results) {
+          setSearchResults(data.results);
+          setShowDropdown(data.results.length > 0);
+        } else {
+          setSearchResults([]);
+          setShowDropdown(false);
+        }
+      } catch (err) {
+        console.error('Error searching stocks:', err);
+        setSearchResults([]);
+        setShowDropdown(false);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery]);
+
   // Helper to fetch quote immediately for a searched symbol
   const fetchSingleQuoteImmediate = async (symbol) => {
     try {
@@ -69,27 +104,34 @@ export default function StockSelector({ selectedSymbol, onSelectSymbol }) {
     }
   };
 
+  const selectStock = (stock) => {
+    // Check if it already exists in the list
+    const exists = stocks.some(s => s.symbol === stock.symbol);
+    if (!exists) {
+      setStocks([stock, ...stocks]);
+    }
+    fetchSingleQuoteImmediate(stock.symbol);
+    onSelectSymbol(stock.symbol);
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowDropdown(false);
+  };
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     if (!searchQuery) return;
     
-    // Auto suffix .NS if not specified
-    let symbol = searchQuery.trim().toUpperCase();
-    if (!symbol.includes('.') && !symbol.includes('-')) {
-      symbol = `${symbol}.NS`;
-    }
-
-    // Check if it already exists in the list
-    const exists = stocks.some(s => s.symbol === symbol);
-    if (!exists) {
-      const newStock = { symbol, name: 'Custom stock query' };
-      setStocks([newStock, ...stocks]);
-      fetchSingleQuoteImmediate(symbol);
-      onSelectSymbol(symbol);
+    if (searchResults.length > 0) {
+      selectStock(searchResults[0]);
     } else {
-      onSelectSymbol(symbol);
+      // Auto suffix .NS if not specified
+      let symbol = searchQuery.trim().toUpperCase();
+      if (!symbol.includes('.') && !symbol.includes('-')) {
+        symbol = `${symbol}.NS`;
+      }
+      const newStock = { symbol, name: 'Custom stock query' };
+      selectStock(newStock);
     }
-    setSearchQuery('');
   };
 
   return (
@@ -110,7 +152,36 @@ export default function StockSelector({ selectedSymbol, onSelectSymbol }) {
             placeholder="Search stock symbol (e.g., RELIANCE)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => {
+              if (searchResults.length > 0) setShowDropdown(true);
+            }}
+            onBlur={() => {
+              setTimeout(() => setShowDropdown(false), 200);
+            }}
+            autoComplete="off"
           />
+          {isSearching && (
+            <div style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
+              <span className="spin-anim" style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid var(--text-muted)', borderTopColor: 'transparent', borderRadius: '50%' }}></span>
+            </div>
+          )}
+          {showDropdown && searchResults.length > 0 && (
+            <div className="search-suggestions-dropdown">
+              {searchResults.map((result) => (
+                <div
+                  key={result.symbol}
+                  className="suggestion-item"
+                  onMouseDown={() => selectStock(result)}
+                >
+                  <div className="suggestion-info">
+                    <span className="suggestion-symbol">{result.symbol.split('.')[0]}</span>
+                    <span className="suggestion-name">{result.name}</span>
+                  </div>
+                  <span className="suggestion-exchange">{result.exchange}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </form>
 
         <div style={{ marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>

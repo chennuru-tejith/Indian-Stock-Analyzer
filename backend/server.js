@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { fetchStockData, fetchRealTimeQuote, fetchStockNews } from './services/dataService.js';
+import { fetchStockData, fetchRealTimeQuote, fetchStockNews, yahooFinance } from './services/dataService.js';
 import { enrichWithIndicators, calculateSupportResistance } from './services/indicatorService.js';
 import { detectPatterns } from './services/patternService.js';
 import { generateSignals } from './services/signalService.js';
@@ -175,6 +175,43 @@ app.get('/api/stock/:symbol/quote', async (req, res) => {
     });
   } catch (error) {
     console.error(`Error in /api/stock/${symbol}/quote:`, error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Route: GET /api/stock/search
+ * Query params:
+ * - q: search query string
+ */
+app.get('/api/stock/search', async (req, res) => {
+  const { q } = req.query;
+  if (!q) {
+    return res.status(400).json({ success: false, error: 'Query parameter "q" is required.' });
+  }
+
+  try {
+    const rawResult = await yahooFinance.search(q);
+    
+    // Filter out equities in NSE and BSE
+    const equities = (rawResult.quotes || [])
+      .filter(item => item.quoteType === 'EQUITY' && item.symbol && (item.symbol.endsWith('.NS') || item.symbol.endsWith('.BO')))
+      .map(item => ({
+        symbol: item.symbol,
+        name: item.shortname || item.longname || item.symbol,
+        exchange: item.exchange
+      }));
+
+    res.json({
+      success: true,
+      query: q,
+      results: equities
+    });
+  } catch (error) {
+    console.error(`Error in /api/stock/search for query "${q}":`, error.message);
     res.status(500).json({
       success: false,
       error: error.message

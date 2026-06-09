@@ -1,7 +1,7 @@
 import YahooFinanceClass from 'yahoo-finance2';
 
 // yahoo-finance2 v3 default export is the YahooFinance class which must be instantiated.
-const yahooFinance = typeof YahooFinanceClass === 'function'
+export const yahooFinance = typeof YahooFinanceClass === 'function'
   ? new YahooFinanceClass({ suppressNotices: ['ripHistorical', 'yahooSurvey'] })
   : YahooFinanceClass;
 
