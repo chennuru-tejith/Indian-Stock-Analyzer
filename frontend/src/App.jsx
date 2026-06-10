@@ -4,7 +4,8 @@ import ChartContainer from './components/ChartContainer';
 import SignalAlerts from './components/SignalAlerts';
 import BacktestResults from './components/BacktestResults';
 import StockIntelligence from './components/StockIntelligence';
-import { Sliders, RefreshCw, BarChart2, Activity, Play, BrainCircuit } from 'lucide-react';
+import GlobalMacroPanel from './components/GlobalMacroPanel';
+import { Sliders, RefreshCw, BarChart2, Activity, Play, BrainCircuit, Globe } from 'lucide-react';
 import './App.css';
 
 export default function App() {
@@ -280,18 +281,26 @@ export default function App() {
           <div className="glass-panel" style={{ display: 'flex', padding: '0.4rem', gap: '0.4rem', borderBottom: '1px solid var(--card-border)' }}>
             <button 
               className={`timeframe-btn ${activeTab === 'INTELLIGENCE' ? 'active' : ''}`}
-              style={{ flex: 1, padding: '0.6rem 0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              style={{ flex: 1, padding: '0.6rem 0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.75rem' }}
               onClick={() => setActiveTab('INTELLIGENCE')}
             >
-              <BrainCircuit size={14} />
-              Stock Intelligence
+              <BrainCircuit size={13} />
+              Local Intel
+            </button>
+            <button 
+              className={`timeframe-btn ${activeTab === 'MACRO' ? 'active' : ''}`}
+              style={{ flex: 1, padding: '0.6rem 0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.75rem' }}
+              onClick={() => setActiveTab('MACRO')}
+            >
+              <Globe size={13} />
+              Global Macro
             </button>
             <button 
               className={`timeframe-btn ${activeTab === 'BACKTEST' ? 'active' : ''}`}
-              style={{ flex: 1, padding: '0.6rem 0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              style={{ flex: 1, padding: '0.6rem 0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.75rem' }}
               onClick={() => setActiveTab('BACKTEST')}
             >
-              <BarChart2 size={14} />
+              <BarChart2 size={13} />
               Backtester
             </button>
           </div>
@@ -299,6 +308,8 @@ export default function App() {
           <div style={{ flex: 1, minHeight: 0 }}>
             {activeTab === 'INTELLIGENCE' ? (
               <StockIntelligence data={intelligenceData} loading={intelligenceLoading} />
+            ) : activeTab === 'MACRO' ? (
+              <GlobalMacroPanel data={intelligenceData} loading={intelligenceLoading} />
             ) : (
               <div>
                 {backtestLoading ? (

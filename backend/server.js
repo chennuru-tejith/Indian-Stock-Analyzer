@@ -6,6 +6,7 @@ import { enrichWithIndicators, calculateSupportResistance } from './services/ind
 import { detectPatterns } from './services/patternService.js';
 import { generateSignals } from './services/signalService.js';
 import { runBacktest } from './services/backtestService.js';
+import { fetchGlobalIndicators, calculatePredictiveTrend } from './services/macroService.js';
 
 dotenv.config();
 
@@ -91,6 +92,14 @@ app.get('/api/stock/:symbol/intelligence', async (req, res) => {
     else if (latestCandle.score <= 25) label = 'STRONG SELL';
     else if (latestCandle.score <= 40) label = 'SELL';
 
+    // Fetch and calculate global macroeconomic predictive trends
+    const globalMacro = await fetchGlobalIndicators();
+    const predictiveTrend = calculatePredictiveTrend(symbol, {
+      unifiedScore: latestCandle.score,
+      recommendation: label,
+      price: latestCandle.close
+    }, globalMacro);
+
     res.json({
       success: true,
       symbol: symbol.toUpperCase(),
@@ -104,7 +113,8 @@ app.get('/api/stock/:symbol/intelligence', async (req, res) => {
       newsSentiment: newsData.newsSentiment,
       newsSentimentScore: newsData.sentimentScore,
       newsMetrics: newsData.metrics,
-      articles: newsData.articles
+      articles: newsData.articles,
+      predictiveTrend
     });
   } catch (error) {
     console.error(`Error in /api/stock/${symbol}/intelligence:`, error.message);
