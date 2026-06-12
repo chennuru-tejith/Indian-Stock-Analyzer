@@ -5,7 +5,8 @@ import SignalAlerts from './components/SignalAlerts';
 import BacktestResults from './components/BacktestResults';
 import StockIntelligence from './components/StockIntelligence';
 import GlobalMacroPanel from './components/GlobalMacroPanel';
-import { Sliders, RefreshCw, BarChart2, Activity, Play, BrainCircuit, Globe } from 'lucide-react';
+import RiskManagerPanel from './components/RiskManagerPanel';
+import { Sliders, RefreshCw, BarChart2, Activity, Play, BrainCircuit, Globe, Shield } from 'lucide-react';
 import './App.css';
 
 export default function App() {
@@ -21,6 +22,10 @@ export default function App() {
   // Intelligence State
   const [intelligenceData, setIntelligenceData] = useState(null);
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
+
+  // Multi-Timeframe Matrix State
+  const [multiTimeframeData, setMultiTimeframeData] = useState(null);
+  const [multiTimeframeLoading, setMultiTimeframeLoading] = useState(false);
 
   // Backtest parameters state
   const [stopLoss, setStopLoss] = useState(2.5);
@@ -64,6 +69,22 @@ export default function App() {
     }
   }, [symbol]);
 
+  // Fetch multi-timeframe matrix
+  const fetchMultiTimeframe = useCallback(async () => {
+    setMultiTimeframeLoading(true);
+    try {
+      const res = await fetch(`http://localhost:5000/api/stock/${symbol}/multi-timeframe`);
+      const data = await res.json();
+      if (data.success) {
+        setMultiTimeframeData(data);
+      }
+    } catch (e) {
+      console.error('Error fetching multi timeframe matrix:', e);
+    } finally {
+      setMultiTimeframeLoading(false);
+    }
+  }, [symbol]);
+
   // Fetch backtest data
   const fetchBacktest = useCallback(async () => {
     setBacktestLoading(true);
@@ -86,7 +107,8 @@ export default function App() {
   useEffect(() => {
     fetchData();
     fetchIntelligence();
-  }, [symbol, timeframe, fetchData, fetchIntelligence]);
+    fetchMultiTimeframe();
+  }, [symbol, timeframe, fetchData, fetchIntelligence, fetchMultiTimeframe]);
 
   useEffect(() => {
     fetchBacktest();
@@ -278,29 +300,37 @@ export default function App() {
 
         {/* Right Column: Toggleable Stock Intelligence vs Backtest */}
         <section className="right-column">
-          <div className="glass-panel" style={{ display: 'flex', padding: '0.4rem', gap: '0.4rem', borderBottom: '1px solid var(--card-border)' }}>
+          <div className="glass-panel" style={{ display: 'flex', padding: '0.4rem', gap: '0.3rem', borderBottom: '1px solid var(--card-border)' }}>
             <button 
               className={`timeframe-btn ${activeTab === 'INTELLIGENCE' ? 'active' : ''}`}
-              style={{ flex: 1, padding: '0.6rem 0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.75rem' }}
+              style={{ flex: 1, padding: '0.6rem 0.15rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem', fontSize: '0.7rem' }}
               onClick={() => setActiveTab('INTELLIGENCE')}
             >
-              <BrainCircuit size={13} />
+              <BrainCircuit size={12} />
               Local Intel
             </button>
             <button 
               className={`timeframe-btn ${activeTab === 'MACRO' ? 'active' : ''}`}
-              style={{ flex: 1, padding: '0.6rem 0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.75rem' }}
+              style={{ flex: 1, padding: '0.6rem 0.15rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem', fontSize: '0.7rem' }}
               onClick={() => setActiveTab('MACRO')}
             >
-              <Globe size={13} />
+              <Globe size={12} />
               Global Macro
             </button>
             <button 
+              className={`timeframe-btn ${activeTab === 'RISK' ? 'active' : ''}`}
+              style={{ flex: 1, padding: '0.6rem 0.15rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem', fontSize: '0.7rem' }}
+              onClick={() => setActiveTab('RISK')}
+            >
+              <Shield size={12} />
+              Risk Manager
+            </button>
+            <button 
               className={`timeframe-btn ${activeTab === 'BACKTEST' ? 'active' : ''}`}
-              style={{ flex: 1, padding: '0.6rem 0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.75rem' }}
+              style={{ flex: 1, padding: '0.6rem 0.15rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem', fontSize: '0.7rem' }}
               onClick={() => setActiveTab('BACKTEST')}
             >
-              <BarChart2 size={13} />
+              <BarChart2 size={12} />
               Backtester
             </button>
           </div>
@@ -310,6 +340,13 @@ export default function App() {
               <StockIntelligence data={intelligenceData} loading={intelligenceLoading} />
             ) : activeTab === 'MACRO' ? (
               <GlobalMacroPanel data={intelligenceData} loading={intelligenceLoading} />
+            ) : activeTab === 'RISK' ? (
+              <RiskManagerPanel 
+                selectedSymbol={symbol}
+                intelligenceData={intelligenceData}
+                multiTimeframeData={multiTimeframeData}
+                loading={multiTimeframeLoading}
+              />
             ) : (
               <div>
                 {backtestLoading ? (

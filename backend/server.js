@@ -229,6 +229,54 @@ app.get('/api/stock/search', async (req, res) => {
   }
 });
 
+/**
+ * Route: GET /api/stock/:symbol/multi-timeframe
+ */
+app.get('/api/stock/:symbol/multi-timeframe', async (req, res) => {
+  const { symbol } = req.params;
+  const intervals = ['5m', '15m', '1h', '1d'];
+
+  try {
+    const results = await Promise.all(intervals.map(async (interval) => {
+      try {
+        const rawCandles = await fetchStockData(symbol, interval, 1);
+        const enrichedCandles = enrichWithIndicators(rawCandles);
+        const patternedCandles = detectPatterns(enrichedCandles);
+        const signaledCandles = generateSignals(patternedCandles);
+        const latest = signaledCandles[signaledCandles.length - 1] || {};
+        
+        return {
+          interval,
+          price: latest.close || 0,
+          score: latest.score || 50,
+          rsi: latest.rsi || null,
+          macd: latest.macd || null,
+          signal: latest.signal || 'HOLD',
+          pattern: latest.patterns?.[0]?.name || 'None'
+        };
+      } catch (err) {
+        console.error(`Error loading multi-timeframe for ${symbol} at ${interval}:`, err.message);
+        return {
+          interval,
+          error: err.message
+        };
+      }
+    }));
+
+    res.json({
+      success: true,
+      symbol: symbol.toUpperCase(),
+      timeframes: results
+    });
+  } catch (error) {
+    console.error(`Error in /api/stock/${symbol}/multi-timeframe:`, error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
