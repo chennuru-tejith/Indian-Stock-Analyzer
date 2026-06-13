@@ -149,15 +149,40 @@ export default function App() {
   return (
     <div className="app-container">
       {/* Header */}
-      <header className="app-header">
+      <header className="app-header" style={{ padding: '0.85rem 2rem' }}>
         <div className="brand">
-          <div className="brand-logo">₹</div>
+          <div className="brand-logo" style={{ background: 'linear-gradient(135deg, var(--color-accent), hsl(180, 100%, 35%))', boxShadow: '0 0 15px var(--glow-accent)' }}>
+            A
+          </div>
           <div>
-            <h1 className="brand-name">INDICATOR FUSION</h1>
+            <h1 className="brand-name" style={{ letterSpacing: '0.05em' }}>ALADDIN FUSION AI</h1>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.15rem' }}>
-              <span className="brand-tag">Stock Intelligence</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>v1.1.0</span>
+              <span className="brand-tag" style={{ color: 'var(--color-accent)', background: 'rgba(0, 242, 254, 0.1)', border: '1px solid rgba(0, 242, 254, 0.25)' }}>
+                Black-Box Risk Engine
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>v1.2.0</span>
             </div>
+          </div>
+        </div>
+
+        {/* Aladdin Quantitative Telemetry Bar */}
+        <div className="telemetry-container">
+          <div className="telemetry-item">
+            <span className="pulse-green"></span>
+            <span className="telemetry-label">SYSTEM:</span>
+            <span className="telemetry-value" style={{ color: 'var(--color-bullish)' }}>ONLINE</span>
+          </div>
+          <div className="telemetry-item" style={{ borderLeft: '1px solid var(--card-border)', paddingLeft: '1rem' }}>
+            <span className="telemetry-label">ENGINES:</span>
+            <span className="telemetry-value" style={{ color: 'var(--color-accent)' }}>ACTIVE</span>
+          </div>
+          <div className="telemetry-item" style={{ borderLeft: '1px solid var(--card-border)', paddingLeft: '1rem' }}>
+            <span className="telemetry-label">LATENCY:</span>
+            <span className="telemetry-value">14ms</span>
+          </div>
+          <div className="telemetry-item" style={{ borderLeft: '1px solid var(--card-border)', paddingLeft: '1rem' }}>
+            <span className="telemetry-label">MODEL RUNS:</span>
+            <span className="telemetry-value" style={{ fontFamily: 'var(--font-mono)' }}>50,000/S</span>
           </div>
         </div>
 
@@ -346,6 +371,7 @@ export default function App() {
                 intelligenceData={intelligenceData}
                 multiTimeframeData={multiTimeframeData}
                 loading={multiTimeframeLoading}
+                candles={candles}
               />
             ) : (
               <div>

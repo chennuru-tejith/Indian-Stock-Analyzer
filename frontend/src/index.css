@@ -1,25 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  /* Harmonious Dark HSL Color Palette */
-  --bg-primary: hsl(224, 71%, 4%);
-  --bg-secondary: hsl(224, 71%, 7%);
-  --card-bg: hsla(224, 60%, 12%, 0.45);
-  --card-border: hsla(224, 50%, 22%, 0.35);
-  --card-hover: hsla(224, 50%, 25%, 0.5);
+  /* Aladdin Black-Box Dark HSL Color Palette */
+  --bg-primary: hsl(224, 71%, 2.5%);
+  --bg-secondary: hsl(224, 71%, 4.5%);
+  --card-bg: hsla(224, 60%, 8%, 0.7);
+  --card-border: hsla(224, 50%, 16%, 0.45);
+  --card-hover: hsla(224, 50%, 20%, 0.65);
   
   --color-bullish: hsl(145, 90%, 43%);
   --color-bearish: hsl(355, 90%, 61%);
-  --color-accent: hsl(210, 100%, 55%);
+  --color-accent: hsl(180, 100%, 45%); /* Neon Cyan */
   --color-warning: hsl(42, 100%, 53%);
   
   --text-primary: hsl(210, 40%, 98%);
   --text-secondary: hsl(215, 25%, 72%);
-  --text-muted: hsl(217, 18%, 52%);
+  --text-muted: hsl(217, 15%, 50%);
   
   --glow-bullish: rgba(16, 185, 129, 0.25);
   --glow-bearish: rgba(239, 68, 68, 0.25);
-  --glow-accent: rgba(59, 130, 246, 0.3);
+  --glow-accent: rgba(0, 242, 254, 0.25);
   
   --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -707,4 +707,49 @@ body {
   padding: 0.15rem 0.4rem;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Aladdin AI Telemetry Dashboard Styling */
+.telemetry-container {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  background: hsla(224, 60%, 8%, 0.45);
+  border: 1px solid var(--card-border);
+  padding: 0.45rem 1rem;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  box-shadow: 0 0 15px rgba(0, 242, 254, 0.05);
+}
+
+.telemetry-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.telemetry-label {
+  color: var(--text-muted);
+}
+
+.telemetry-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.pulse-green {
+  width: 7px;
+  height: 7px;
+  background-color: var(--color-bullish);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--color-bullish);
+  animation: telemetryPulse 1.5s infinite;
+}
+
+@keyframes telemetryPulse {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
 }
