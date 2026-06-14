@@ -1,12 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  /* Aladdin Black-Box Dark HSL Color Palette */
+  /* Aladdin Black-Box Dark HSL Color Palette (Default Cyan) */
   --bg-primary: hsl(224, 71%, 2.5%);
   --bg-secondary: hsl(224, 71%, 4.5%);
   --card-bg: hsla(224, 60%, 8%, 0.7);
   --card-border: hsla(224, 50%, 16%, 0.45);
   --card-hover: hsla(224, 50%, 20%, 0.65);
+  --header-bg: hsla(224, 71%, 4%, 0.85);
   
   --color-bullish: hsl(145, 90%, 43%);
   --color-bearish: hsl(355, 90%, 61%);
@@ -20,10 +21,91 @@
   --glow-bullish: rgba(16, 185, 129, 0.25);
   --glow-bearish: rgba(239, 68, 68, 0.25);
   --glow-accent: rgba(0, 242, 254, 0.25);
+
+  --gradient-1: hsla(210, 100%, 15%, 0.15);
+  --gradient-2: hsla(220, 100%, 12%, 0.20);
   
   --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Bloomberg Retro Theme (Amber/Orange) */
+:root[data-theme='bloomberg'] {
+  --bg-primary: hsl(30, 20%, 3%);
+  --bg-secondary: hsl(30, 20%, 5%);
+  --card-bg: hsla(32, 25%, 8%, 0.75);
+  --card-border: hsla(32, 20%, 16%, 0.45);
+  --card-hover: hsla(32, 20%, 22%, 0.65);
+  --header-bg: hsla(30, 20%, 4%, 0.85);
+  
+  --color-bullish: hsl(145, 80%, 40%);
+  --color-bearish: hsl(355, 85%, 58%);
+  --color-accent: hsl(32, 100%, 50%); /* Amber / Phosphor Orange */
+  --color-warning: hsl(42, 100%, 45%);
+  
+  --text-primary: hsl(32, 60%, 95%);
+  --text-secondary: hsl(32, 30%, 75%);
+  --text-muted: hsl(32, 20%, 50%);
+  
+  --glow-bullish: rgba(16, 185, 129, 0.15);
+  --glow-bearish: rgba(239, 68, 68, 0.15);
+  --glow-accent: rgba(245, 158, 11, 0.25);
+
+  --gradient-1: hsla(32, 100%, 12%, 0.12);
+  --gradient-2: hsla(32, 100%, 8%, 0.15);
+}
+
+/* Matrix Terminal Theme (Phosphor Green) */
+:root[data-theme='matrix'] {
+  --bg-primary: hsl(120, 25%, 2%);
+  --bg-secondary: hsl(120, 25%, 4%);
+  --card-bg: hsla(120, 25%, 5%, 0.8);
+  --card-border: hsla(120, 20%, 15%, 0.45);
+  --card-hover: hsla(120, 20%, 22%, 0.65);
+  --header-bg: hsla(120, 25%, 3%, 0.85);
+  
+  --color-bullish: hsl(120, 100%, 40%);
+  --color-bearish: hsl(0, 100%, 45%);
+  --color-accent: hsl(120, 100%, 45%); /* Phosphor Green */
+  --color-warning: hsl(60, 100%, 45%);
+  
+  --text-primary: hsl(120, 80%, 93%);
+  --text-secondary: hsl(120, 40%, 68%);
+  --text-muted: hsl(120, 20%, 42%);
+  
+  --glow-bullish: rgba(0, 255, 0, 0.15);
+  --glow-bearish: rgba(255, 0, 0, 0.15);
+  --glow-accent: rgba(0, 255, 0, 0.25);
+
+  --gradient-1: hsla(120, 100%, 8%, 0.08);
+  --gradient-2: hsla(120, 100%, 4%, 0.12);
+}
+
+/* Navy Command Theme (Cobalt Blue / Crimson) */
+:root[data-theme='navy'] {
+  --bg-primary: hsl(222, 47%, 4.5%);
+  --bg-secondary: hsl(222, 45%, 7%);
+  --card-bg: hsla(222, 40%, 11%, 0.75);
+  --card-border: hsla(222, 30%, 19%, 0.45);
+  --card-hover: hsla(222, 30%, 25%, 0.65);
+  --header-bg: hsla(222, 47%, 6%, 0.85);
+  
+  --color-bullish: hsl(150, 95%, 40%);
+  --color-bearish: hsl(355, 95%, 60%);
+  --color-accent: hsl(212, 100%, 55%); /* Cobalt / Electric Blue */
+  --color-warning: hsl(45, 100%, 50%);
+  
+  --text-primary: hsl(210, 50%, 97%);
+  --text-secondary: hsl(215, 30%, 78%);
+  --text-muted: hsl(215, 20%, 55%);
+  
+  --glow-bullish: rgba(16, 185, 129, 0.18);
+  --glow-bearish: rgba(239, 68, 68, 0.18);
+  --glow-accent: rgba(59, 130, 246, 0.25);
+
+  --gradient-1: hsla(212, 100%, 15%, 0.18);
+  --gradient-2: hsla(222, 100%, 10%, 0.22);
 }
 
 * {
@@ -38,12 +120,13 @@ body {
   font-family: var(--font-sans);
   background-color: var(--bg-primary);
   background-image: 
-    radial-gradient(at 0% 0%, hsla(210, 100%, 15%, 0.15) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, hsla(220, 100%, 12%, 0.2) 0px, transparent 50%);
+    radial-gradient(at 0% 0%, var(--gradient-1) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, var(--gradient-2) 0px, transparent 50%);
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease, background-image 0.4s ease;
 }
 
 /* Glassmorphism Classes */
@@ -68,11 +151,12 @@ body {
   align-items: center;
   padding: 1.25rem 2rem;
   border-bottom: 1px solid var(--card-border);
-  background: hsla(224, 71%, 4%, 0.85);
+  background: var(--header-bg);
   backdrop-filter: blur(10px);
   position: sticky;
   top: 0;
   z-index: 100;
+  transition: background-color 0.4s ease, border-color 0.4s ease;
 }
 
 .brand {

@@ -16,6 +16,14 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Theme State (Aladdin, Bloomberg, Matrix, Navy)
+  const [theme, setTheme] = useState(() => localStorage.getItem('aladdin-theme') || 'aladdin');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('aladdin-theme', theme);
+  }, [theme]);
+
   // Tabs: 'INTELLIGENCE' | 'BACKTEST'
   const [activeTab, setActiveTab] = useState('INTELLIGENCE');
 
@@ -188,6 +196,32 @@ export default function App() {
 
         {/* Global Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginRight: '0.5rem' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Palette:</span>
+            <select
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              className="setting-input"
+              style={{
+                cursor: 'pointer',
+                padding: '0.35rem 0.65rem',
+                fontSize: '0.75rem',
+                borderRadius: '6px',
+                background: 'hsla(224, 60%, 8%, 0.8)',
+                border: '1px solid var(--card-border)',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-sans)',
+                outline: 'none',
+                height: '30px'
+              }}
+            >
+              <option value="aladdin">Aladdin Cyan</option>
+              <option value="bloomberg">Bloomberg Amber</option>
+              <option value="matrix">Matrix Green</option>
+              <option value="navy">Navy Command</option>
+            </select>
+          </div>
+
           <div className="timeframe-container">
             {['5m', '15m', '1h', '1d'].map(tf => (
               <button
@@ -200,7 +234,7 @@ export default function App() {
             ))}
           </div>
 
-          <button onClick={fetchData} className="timeframe-btn" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={fetchData} className="timeframe-btn" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '30px', width: '30px' }}>
             <RefreshCw size={14} className={loading ? 'spin-anim' : ''} />
           </button>
         </div>

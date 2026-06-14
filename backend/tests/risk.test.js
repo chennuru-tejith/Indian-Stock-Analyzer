@@ -207,3 +207,133 @@ describe('Aladdin Risk Engine (VaR & Volatility) Calculations', () => {
   });
 });
 
+function calculateCorrelation(returnsX, returnsY) {
+  const len = Math.min(returnsX.length, returnsY.length);
+  if (len === 0) return 0;
+
+  const x = returnsX.slice(-len);
+  const y = returnsY.slice(-len);
+
+  const meanX = x.reduce((sum, val) => sum + val, 0) / len;
+  const meanY = y.reduce((sum, val) => sum + val, 0) / len;
+
+  let sumProductDiff = 0;
+  let sumSqDiffX = 0;
+  let sumSqDiffY = 0;
+
+  for (let i = 0; i < len; i++) {
+    const diffX = x[i] - meanX;
+    const diffY = y[i] - meanY;
+    sumProductDiff += diffX * diffY;
+    sumSqDiffX += diffX * diffX;
+    sumSqDiffY += diffY * diffY;
+  }
+
+  const denominator = Math.sqrt(sumSqDiffX * sumSqDiffY);
+  return denominator > 0 ? sumProductDiff / denominator : 0.0;
+}
+
+function calculatePortfolioRisk(assets, capital = 100000) {
+  const stats = assets.map(a => {
+    const mean = a.returns.reduce((sum, val) => sum + val, 0) / a.returns.length;
+    const variance = a.returns.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (a.returns.length - 1);
+    const dailyVol = Math.sqrt(variance);
+    return {
+      weight: a.weight,
+      mean,
+      dailyVol,
+      returns: a.returns
+    };
+  });
+
+  const correlationMatrix = [];
+  for (let i = 0; i < stats.length; i++) {
+    correlationMatrix[i] = [];
+    for (let j = 0; j < stats.length; j++) {
+      if (i === j) {
+        correlationMatrix[i][j] = 1.0;
+      } else {
+        correlationMatrix[i][j] = calculateCorrelation(stats[i].returns, stats[j].returns);
+      }
+    }
+  }
+
+  let portfolioVariance = 0;
+  const normalizedWeights = stats.map(s => s.weight / 100);
+
+  for (let i = 0; i < stats.length; i++) {
+    const w_i = normalizedWeights[i];
+    const vol_i = stats[i].dailyVol;
+    portfolioVariance += Math.pow(w_i * vol_i, 2);
+
+    for (let j = i + 1; j < stats.length; j++) {
+      const w_j = normalizedWeights[j];
+      const vol_j = stats[j].dailyVol;
+      const corr_ij = correlationMatrix[i][j];
+      portfolioVariance += 2 * w_i * w_j * vol_i * vol_j * corr_ij;
+    }
+  }
+
+  const dailyVol = Math.sqrt(portfolioVariance);
+  const annualizedVol = dailyVol * Math.sqrt(252);
+  const varPercent = 1.65 * dailyVol * 100;
+  const varValue = (capital * varPercent) / 100;
+
+  return {
+    dailyVol: dailyVol * 100,
+    annualizedVol: annualizedVol * 100,
+    varPercent,
+    varValue,
+    correlationMatrix
+  };
+}
+
+describe('Aladdin Portfolio Risk Simulator Calculations', () => {
+  test('calculates correct Pearson correlation coefficient', () => {
+    const returnsX = [0.01, -0.01, 0.02, -0.02, 0.01, -0.01, 0.02, -0.02];
+    const returnsY = [0.01, -0.01, 0.02, -0.02, 0.01, -0.01, 0.02, -0.02]; // Identical
+    const returnsZ = [-0.01, 0.01, -0.02, 0.02, -0.01, 0.01, -0.02, 0.02]; // Perfectly Inverse
+
+    expect(calculateCorrelation(returnsX, returnsY)).toBeCloseTo(1.0, 5);
+    expect(calculateCorrelation(returnsX, returnsZ)).toBeCloseTo(-1.0, 5);
+  });
+
+  test('calculates portfolio volatility matching single asset volatility when correlation is +1.0', () => {
+    const returnsA = [0.02, -0.01, 0.03, -0.02, 0.01, -0.01, 0.02, -0.03, 0.01, -0.01];
+    const returnsB = [0.02, -0.01, 0.03, -0.02, 0.01, -0.01, 0.02, -0.03, 0.01, -0.01]; // Perfect positive correlation (+1)
+
+    const assets = [
+      { returns: returnsA, weight: 50 },
+      { returns: returnsB, weight: 50 }
+    ];
+
+    const portfolioResult = calculatePortfolioRisk(assets, 100000);
+    
+    // Individual asset volatility
+    const mean = returnsA.reduce((sum, v) => sum + v, 0) / returnsA.length;
+    const variance = returnsA.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (returnsA.length - 1);
+    const individualDailyVol = Math.sqrt(variance) * 100;
+
+    expect(portfolioResult.dailyVol).toBeCloseTo(individualDailyVol, 4);
+    expect(portfolioResult.correlationMatrix[0][1]).toBeCloseTo(1.0, 4);
+  });
+
+  test('calculates zero portfolio volatility (perfect hedge) when correlation is -1.0 with equal weights', () => {
+    const returnsX = [0.01, -0.02, 0.03, -0.01, 0.02, -0.01, 0.02, -0.02, 0.01, -0.01];
+    const returnsY = [-0.01, 0.02, -0.03, 0.01, -0.02, 0.01, -0.02, 0.02, -0.01, 0.01]; // Perfect negative correlation (-1)
+
+    const assets = [
+      { returns: returnsX, weight: 50 },
+      { returns: returnsY, weight: 50 }
+    ];
+
+    const portfolioResult = calculatePortfolioRisk(assets, 100000);
+
+    expect(portfolioResult.dailyVol).toBeCloseTo(0, 4);
+    expect(portfolioResult.annualizedVol).toBeCloseTo(0, 4);
+    expect(portfolioResult.varValue).toBeCloseTo(0, 4);
+    expect(portfolioResult.correlationMatrix[0][1]).toBeCloseTo(-1.0, 4);
+  });
+});
+
+
