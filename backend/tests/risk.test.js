@@ -101,7 +101,7 @@ describe('Position Sizing & Risk Allocation Mathematics', () => {
   });
 });
 
-function calculateRiskMetrics(candlesSeries, totalTradeValue = 100000) {
+function calculateRiskMetrics(candlesSeries, totalTradeValue = 100000, method = 'PARAMETRIC') {
   if (!candlesSeries || candlesSeries.length < 10) {
     return { dailyVol: 1.8, annualizedVol: 28.5, varValue: 0, varPercent: 2.97 };
   }
@@ -123,7 +123,14 @@ function calculateRiskMetrics(candlesSeries, totalTradeValue = 100000) {
   const dailyVol = Math.sqrt(variance);
   const annualizedVol = dailyVol * Math.sqrt(252);
   
-  const varPercent = 1.65 * dailyVol * 100;
+  let varPercent;
+  if (method === 'HISTORICAL') {
+    const sortedReturns = [...returns].sort((a, b) => a - b);
+    const percentileIndex = Math.floor(sortedReturns.length * 0.05);
+    varPercent = Math.abs(sortedReturns[percentileIndex] || 0) * 100;
+  } else {
+    varPercent = 1.65 * dailyVol * 100;
+  }
   const varValue = (totalTradeValue * varPercent) / 100;
 
   return {
@@ -133,79 +140,6 @@ function calculateRiskMetrics(candlesSeries, totalTradeValue = 100000) {
     varValue
   };
 }
-
-describe('Aladdin Risk Engine (VaR & Volatility) Calculations', () => {
-  test('returns fallback default metrics when candles series is insufficient (< 10 candles)', () => {
-    const insufficientCandles = [
-      { close: 100 },
-      { close: 102 },
-      { close: 104 }
-    ];
-    const result = calculateRiskMetrics(insufficientCandles, 50000);
-    expect(result.dailyVol).toBe(1.8);
-    expect(result.annualizedVol).toBe(28.5);
-    expect(result.varPercent).toBe(2.97);
-    expect(result.varValue).toBe(0);
-  });
-
-  test('returns fallback default metrics when returns length is insufficient (< 5 valid returns)', () => {
-    // 11 candles, but only 3 have close > 0
-    const candlesWithInvalidPrices = [
-      { close: 0 }, { close: 0 }, { close: 0 }, { close: 0 },
-      { close: 100 }, { close: 102 }, { close: 101 },
-      { close: 0 }, { close: 0 }, { close: 0 }, { close: 0 }
-    ];
-    const result = calculateRiskMetrics(candlesWithInvalidPrices, 100000);
-    expect(result.dailyVol).toBe(1.8);
-    expect(result.annualizedVol).toBe(28.5);
-  });
-
-  test('calculates correct zero volatility and zero VaR for constant close prices', () => {
-    const constantCandles = Array.from({ length: 15 }, () => ({ close: 150 }));
-    const result = calculateRiskMetrics(constantCandles, 100000);
-
-    expect(result.dailyVol).toBe(0);
-    expect(result.annualizedVol).toBe(0);
-    expect(result.varPercent).toBe(0);
-    expect(result.varValue).toBe(0);
-  });
-
-  test('calculates correct daily standard deviation, annualized volatility, and Value-at-Risk for mathematical inputs', () => {
-    // Construct a series generating returns: [0.01, -0.01, 0.02, -0.02, 0.01, -0.01, 0.02, -0.02, 0.01, -0.01]
-    const prices = [
-      100.0,
-      101.0,       // +1%
-      99.99,       // -1% (approx)
-      101.9898,    // +2% (approx)
-      99.95,       // -2% (approx)
-      100.9495,    // +1% (approx)
-      99.94,       // -1% (approx)
-      101.9388,    // +2% (approx)
-      99.9,        // -2% (approx)
-      100.899,     // +1% (approx)
-      99.89        // -1% (approx)
-    ];
-    
-    const candles = prices.map(p => ({ close: p }));
-    const totalTradeValue = 100000; // ₹1,00,000 position
-    
-    const result = calculateRiskMetrics(candles, totalTradeValue);
-
-    // Expected daily std dev of returns:
-    // Mean is approx 0.
-    // Sum of squared diffs: 6 * 0.01^2 + 4 * 0.02^2 = 0.0022
-    // Sample variance (divided by N-1, where N = 10 returns): 0.0022 / 9 = 0.00024444
-    // Daily standard deviation = sqrt(0.00024444) = 0.0156347 (approx 1.56%)
-    // Annualized volatility = dailyVol * sqrt(252) = 0.24819 (approx 24.82%)
-    // VaR Percent = 1.65 * dailyVol * 100 = 2.5797% (approx 2.58%)
-    // VaR Value = 100000 * 2.5797% = ₹2,580 (approx)
-    
-    expect(result.dailyVol).toBeCloseTo(1.56, 1);
-    expect(result.annualizedVol).toBeCloseTo(24.82, 1);
-    expect(result.varPercent).toBeCloseTo(2.58, 1);
-    expect(result.varValue).toBeCloseTo(2580, 0);
-  });
-});
 
 function calculateCorrelation(returnsX, returnsY) {
   const len = Math.min(returnsX.length, returnsY.length);
@@ -233,7 +167,7 @@ function calculateCorrelation(returnsX, returnsY) {
   return denominator > 0 ? sumProductDiff / denominator : 0.0;
 }
 
-function calculatePortfolioRisk(assets, capital = 100000) {
+function calculatePortfolioRisk(assets, capital = 100000, method = 'PARAMETRIC') {
   const stats = assets.map(a => {
     const mean = a.returns.reduce((sum, val) => sum + val, 0) / a.returns.length;
     const variance = a.returns.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (a.returns.length - 1);
@@ -244,6 +178,11 @@ function calculatePortfolioRisk(assets, capital = 100000) {
       dailyVol,
       returns: a.returns
     };
+  });
+
+  const minLen = Math.min(...stats.map(s => s.returns.length));
+  stats.forEach(s => {
+    s.returns = s.returns.slice(-minLen);
   });
 
   const correlationMatrix = [];
@@ -274,25 +213,156 @@ function calculatePortfolioRisk(assets, capital = 100000) {
     }
   }
 
-  const dailyVol = Math.sqrt(portfolioVariance);
-  const annualizedVol = dailyVol * Math.sqrt(252);
-  const varPercent = 1.65 * dailyVol * 100;
+  const portfolioDailyVol = Math.sqrt(portfolioVariance);
+  const portfolioAnnualVol = portfolioDailyVol * Math.sqrt(252);
+
+  const portfolioReturnsSeries = [];
+  for (let k = 0; k < minLen; k++) {
+    let r_p = 0;
+    for (let i = 0; i < stats.length; i++) {
+      r_p += normalizedWeights[i] * stats[i].returns[k];
+    }
+    portfolioReturnsSeries.push(r_p);
+  }
+
+  let varPercent;
+  if (method === 'HISTORICAL') {
+    const sortedP = [...portfolioReturnsSeries].sort((a, b) => a - b);
+    const pIndex = Math.floor(sortedP.length * 0.05);
+    varPercent = Math.abs(sortedP[pIndex] || 0) * 100;
+  } else {
+    varPercent = 1.65 * portfolioDailyVol * 100;
+  }
   const varValue = (capital * varPercent) / 100;
 
+  // Euler Risk Contributions
+  const marginalContributions = stats.map((s_i, i) => {
+    let sum = 0;
+    for (let j = 0; j < stats.length; j++) {
+      const w_j = normalizedWeights[j];
+      const vol_i = s_i.dailyVol;
+      const vol_j = stats[j].dailyVol;
+      const corr_ij = correlationMatrix[i][j];
+      const cov_ij = corr_ij * vol_i * vol_j;
+      sum += w_j * cov_ij;
+    }
+    return portfolioDailyVol > 0 ? (sum / portfolioDailyVol) : 0;
+  });
+
+  const riskContributions = stats.map((s_i, i) => {
+    const w_i = normalizedWeights[i];
+    const mc = marginalContributions[i];
+    const rcPercent = portfolioDailyVol > 0 ? ((w_i * mc) / portfolioDailyVol) * 100 : 0;
+    const rcValue = (rcPercent * varValue) / 100;
+    return {
+      rcPercent,
+      rcValue
+    };
+  });
+
+  const pDailyMean = portfolioReturnsSeries.reduce((sum, v) => sum + v, 0) / minLen;
+  const pAnnualizedReturn = pDailyMean * 252;
+  const sharpeRatio = portfolioAnnualVol > 0 ? (pAnnualizedReturn - 0.06) / portfolioAnnualVol : 0;
+
   return {
-    dailyVol: dailyVol * 100,
-    annualizedVol: annualizedVol * 100,
+    dailyVol: portfolioDailyVol * 100,
+    annualizedVol: portfolioAnnualVol * 100,
     varPercent,
     varValue,
-    correlationMatrix
+    correlationMatrix,
+    riskContributions,
+    sharpeRatio
   };
 }
+
+describe('Aladdin Risk Engine (VaR & Volatility) Calculations', () => {
+  test('returns fallback default metrics when candles series is insufficient (< 10 candles)', () => {
+    const insufficientCandles = [
+      { close: 100 },
+      { close: 102 },
+      { close: 104 }
+    ];
+    const result = calculateRiskMetrics(insufficientCandles, 50000);
+    expect(result.dailyVol).toBe(1.8);
+    expect(result.annualizedVol).toBe(28.5);
+    expect(result.varPercent).toBe(2.97);
+    expect(result.varValue).toBe(0);
+  });
+
+  test('returns fallback default metrics when returns length is insufficient (< 5 valid returns)', () => {
+    const candlesWithInvalidPrices = [
+      { close: 0 }, { close: 0 }, { close: 0 }, { close: 0 },
+      { close: 100 }, { close: 102 }, { close: 101 },
+      { close: 0 }, { close: 0 }, { close: 0 }, { close: 0 }
+    ];
+    const result = calculateRiskMetrics(candlesWithInvalidPrices, 100000);
+    expect(result.dailyVol).toBe(1.8);
+    expect(result.annualizedVol).toBe(28.5);
+  });
+
+  test('calculates correct zero volatility and zero VaR for constant close prices', () => {
+    const constantCandles = Array.from({ length: 15 }, () => ({ close: 150 }));
+    const result = calculateRiskMetrics(constantCandles, 100000);
+
+    expect(result.dailyVol).toBe(0);
+    expect(result.annualizedVol).toBe(0);
+    expect(result.varPercent).toBe(0);
+    expect(result.varValue).toBe(0);
+  });
+
+  test('calculates correct daily standard deviation, annualized volatility, and Value-at-Risk for mathematical inputs', () => {
+    const prices = [
+      100.0,
+      101.0,       // +1%
+      99.99,       // -1%
+      101.9898,    // +2%
+      99.95,       // -2%
+      100.9495,    // +1%
+      99.94,       // -1%
+      101.9388,    // +2%
+      99.9,        // -2%
+      100.899,     // +1%
+      99.89        // -1%
+    ];
+    
+    const candles = prices.map(p => ({ close: p }));
+    const totalTradeValue = 100000;
+    
+    const result = calculateRiskMetrics(candles, totalTradeValue, 'PARAMETRIC');
+
+    expect(result.dailyVol).toBeCloseTo(1.56, 1);
+    expect(result.annualizedVol).toBeCloseTo(24.82, 1);
+    expect(result.varPercent).toBeCloseTo(2.58, 1);
+    expect(result.varValue).toBeCloseTo(2580, 0);
+  });
+
+  test('calculates correct Historical VaR (empirical 5th percentile) for daily close prices', () => {
+    // Generate close prices corresponding to exactly 20 daily returns from -10% up to +9%
+    const returns = [
+      -0.10, -0.09, -0.08, -0.07, -0.06, -0.05, -0.04, -0.03, -0.02, -0.01,
+       0.00,  0.01,  0.02,  0.03,  0.04,  0.05,  0.06,  0.07,  0.08,  0.09
+    ];
+    let price = 100;
+    const candles = [{ close: price }];
+    returns.forEach(r => {
+      price = price * (1 + r);
+      candles.push({ close: price });
+    });
+
+    const result = calculateRiskMetrics(candles, 100000, 'HISTORICAL');
+    // For length 20, 5th percentile index = floor(20 * 0.05) = 1.
+    // Sorted returns at index 1 is -0.09 (9% loss).
+    // So historical VaR should be exactly 9.0%.
+    expect(result.varPercent).toBeCloseTo(9.0, 4);
+    expect(result.varValue).toBeCloseTo(9000, 0);
+  });
+});
 
 describe('Aladdin Portfolio Risk Simulator Calculations', () => {
   test('calculates correct Pearson correlation coefficient', () => {
     const returnsX = [0.01, -0.01, 0.02, -0.02, 0.01, -0.01, 0.02, -0.02];
-    const returnsY = [0.01, -0.01, 0.02, -0.02, 0.01, -0.01, 0.02, -0.02]; // Identical
-    const returnsZ = [-0.01, 0.01, -0.02, 0.02, -0.01, 0.01, -0.02, 0.02]; // Perfectly Inverse
+    const returnsY = [0.01, -0.01, 0.02, -0.02, 0.01, -0.01, 0.02, -0.02];
+    const returnsZ = [-0.01, 0.01, -0.02, 0.02, -0.01, 0.01, -0.02, 0.02];
 
     expect(calculateCorrelation(returnsX, returnsY)).toBeCloseTo(1.0, 5);
     expect(calculateCorrelation(returnsX, returnsZ)).toBeCloseTo(-1.0, 5);
@@ -300,16 +370,15 @@ describe('Aladdin Portfolio Risk Simulator Calculations', () => {
 
   test('calculates portfolio volatility matching single asset volatility when correlation is +1.0', () => {
     const returnsA = [0.02, -0.01, 0.03, -0.02, 0.01, -0.01, 0.02, -0.03, 0.01, -0.01];
-    const returnsB = [0.02, -0.01, 0.03, -0.02, 0.01, -0.01, 0.02, -0.03, 0.01, -0.01]; // Perfect positive correlation (+1)
+    const returnsB = [0.02, -0.01, 0.03, -0.02, 0.01, -0.01, 0.02, -0.03, 0.01, -0.01];
 
     const assets = [
       { returns: returnsA, weight: 50 },
       { returns: returnsB, weight: 50 }
     ];
 
-    const portfolioResult = calculatePortfolioRisk(assets, 100000);
+    const portfolioResult = calculatePortfolioRisk(assets, 100000, 'PARAMETRIC');
     
-    // Individual asset volatility
     const mean = returnsA.reduce((sum, v) => sum + v, 0) / returnsA.length;
     const variance = returnsA.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (returnsA.length - 1);
     const individualDailyVol = Math.sqrt(variance) * 100;
@@ -320,20 +389,72 @@ describe('Aladdin Portfolio Risk Simulator Calculations', () => {
 
   test('calculates zero portfolio volatility (perfect hedge) when correlation is -1.0 with equal weights', () => {
     const returnsX = [0.01, -0.02, 0.03, -0.01, 0.02, -0.01, 0.02, -0.02, 0.01, -0.01];
-    const returnsY = [-0.01, 0.02, -0.03, 0.01, -0.02, 0.01, -0.02, 0.02, -0.01, 0.01]; // Perfect negative correlation (-1)
+    const returnsY = [-0.01, 0.02, -0.03, 0.01, -0.02, 0.01, -0.02, 0.02, -0.01, 0.01];
 
     const assets = [
       { returns: returnsX, weight: 50 },
       { returns: returnsY, weight: 50 }
     ];
 
-    const portfolioResult = calculatePortfolioRisk(assets, 100000);
+    const portfolioResult = calculatePortfolioRisk(assets, 100000, 'PARAMETRIC');
 
     expect(portfolioResult.dailyVol).toBeCloseTo(0, 4);
     expect(portfolioResult.annualizedVol).toBeCloseTo(0, 4);
     expect(portfolioResult.varValue).toBeCloseTo(0, 4);
     expect(portfolioResult.correlationMatrix[0][1]).toBeCloseTo(-1.0, 4);
   });
+
+  test('verifies that Euler risk contributions sum up to the diversified portfolio VaR value', () => {
+    const returnsA = [0.01, -0.02, 0.01, 0.03, -0.01, 0.02, -0.01, 0.02, -0.03, 0.01];
+    const returnsB = [-0.01, 0.02, 0.015, -0.01, 0.02, -0.02, 0.03, -0.01, 0.02, -0.015];
+    const returnsC = [0.02, -0.01, 0.03, -0.02, 0.01, -0.01, 0.02, -0.03, 0.01, -0.01];
+
+    const assets = [
+      { returns: returnsA, weight: 40 },
+      { returns: returnsB, weight: 35 },
+      { returns: returnsC, weight: 25 }
+    ];
+
+    const portfolioResult = calculatePortfolioRisk(assets, 150000, 'PARAMETRIC');
+
+    // Euler's theorem: Sum of Component VaRs (riskContributions[i].rcValue) = Total Portfolio VaR
+    const sumComponentVaRs = portfolioResult.riskContributions.reduce((sum, rc) => sum + rc.rcValue, 0);
+
+    expect(sumComponentVaRs).toBeCloseTo(portfolioResult.varValue, 3);
+  });
+
+  test('calculates correct Sharpe ratio given set return and volatility series', () => {
+    // Generate returns where daily mean is 0.02 (2% daily)
+    // Sharpe Ratio = (AnnualizedReturn - RiskFreeRate) / AnnualizedVol
+    const returnsA = [0.02, 0.02, 0.02, 0.02, 0.02, 0.02];
+    const returnsB = [0.02, 0.02, 0.02, 0.02, 0.02, 0.02];
+
+    const assets = [
+      { returns: returnsA, weight: 60 },
+      { returns: returnsB, weight: 40 }
+    ];
+
+    // Under constant returns, daily volatility is 0, so Sharpe is 0. Let's add slight variance to assert non-zero
+    const varReturnsA = [0.022, 0.018, 0.021, 0.019, 0.022, 0.018]; // Mean = 0.02
+    const varReturnsB = [0.022, 0.018, 0.021, 0.019, 0.022, 0.018]; // Mean = 0.02
+
+    const assetsWithVol = [
+      { returns: varReturnsA, weight: 50 },
+      { returns: varReturnsB, weight: 50 }
+    ];
+
+    const portfolioResult = calculatePortfolioRisk(assetsWithVol, 100000, 'PARAMETRIC');
+    
+    // Annualized Volatility: dailyVol * sqrt(252)
+    // Annualized Return: dailyMean * 252 = 0.02 * 252 = 5.04 (504%)
+    // Expected Sharpe = (5.04 - 0.06) / AnnualVol
+    const expectedAnnualReturn = 0.02 * 252;
+    const expectedAnnualVol = (portfolioResult.dailyVol / 100) * Math.sqrt(252);
+    const expectedSharpe = expectedAnnualVol > 0 ? (expectedAnnualReturn - 0.06) / expectedAnnualVol : 0;
+
+    expect(portfolioResult.sharpeRatio).toBeCloseTo(expectedSharpe, 5);
+  });
 });
+
 
 

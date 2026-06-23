@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Shield, Coins, Scale, TrendingUp, TrendingDown, RefreshCw, AlertTriangle, CheckCircle, Plus, Trash2, Info } from 'lucide-react';
 
 export default function RiskManagerPanel({ selectedSymbol, intelligenceData, multiTimeframeData, loading, candles }) {
   // Navigation Tabs: 'POSITION' | 'PORTFOLIO'
   const [riskTab, setRiskTab] = useState('POSITION');
+
+  // Risk Model Calculation Toggle: 'PARAMETRIC' | 'HISTORICAL'
+  const [varMethod, setVarMethod] = useState('PARAMETRIC');
 
   // Single Position Settings
   const [capital, setCapital] = useState(100000);
@@ -25,6 +28,10 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
   const [portfolioResults, setPortfolioResults] = useState(null);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [portfolioError, setPortfolioError] = useState(null);
+  const [failedAssets, setFailedAssets] = useState([]);
+
+  // Client-Side History Cache (stored in useRef to persist across renders)
+  const historyCache = useRef({});
 
   // Sync inputs with intelligence price levels on stock change
   useEffect(() => {
@@ -36,23 +43,32 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
     }
   }, [intelligenceData]);
 
+  // Keep parent fetched candles in the client-side cache
+  useEffect(() => {
+    if (selectedSymbol && candles && candles.length > 0) {
+      const sym = selectedSymbol.trim().toUpperCase();
+      historyCache.current[sym] = candles;
+    }
+  }, [selectedSymbol, candles]);
+
   // Keep first item of portfolio in sync with active selectedSymbol
   useEffect(() => {
     setPortfolio(prev => {
       const updated = [...prev];
       if (updated.length > 0 && selectedSymbol) {
-        updated[0] = { ...updated[0], symbol: selectedSymbol };
+        const sym = selectedSymbol.trim().toUpperCase();
+        updated[0] = { ...updated[0], symbol: sym };
       }
       return updated;
     });
   }, [selectedSymbol]);
 
-  // Run portfolio simulation automatically when tab opens or portfolio changes
+  // Run portfolio simulation automatically when tab opens or model changes
   useEffect(() => {
     if (riskTab === 'PORTFOLIO') {
       runPortfolioSimulation();
     }
-  }, [riskTab, selectedSymbol]);
+  }, [riskTab, selectedSymbol, varMethod]);
 
   // Position Sizing Calculations
   const diffSL = entry - stopLoss;
@@ -71,7 +87,7 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
   const actualReward = sharesToBuy * diffTP;
 
   // Single stock historical risk metrics
-  const calculateRiskMetrics = (candlesSeries) => {
+  const calculateRiskMetrics = (candlesSeries, method = 'PARAMETRIC') => {
     if (!candlesSeries || candlesSeries.length < 10) {
       return { dailyVol: 1.8, annualizedVol: 28.5, varValue: 0, varPercent: 2.97 };
     }
@@ -93,7 +109,18 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
     const dailyVol = Math.sqrt(variance);
     const annualizedVol = dailyVol * Math.sqrt(252);
     
-    const varPercent = 1.65 * dailyVol * 100;
+    let varPercent;
+    if (method === 'HISTORICAL') {
+      // Historical VaR (95% confidence) -> 5th percentile of actual returns
+      const sortedReturns = [...returns].sort((a, b) => a - b);
+      const percentileIndex = Math.floor(sortedReturns.length * 0.05);
+      const percentileReturn = sortedReturns[percentileIndex] || 0;
+      varPercent = Math.abs(percentileReturn) * 100;
+    } else {
+      // Parametric VaR (95% confidence) -> 1.65 * Volatility
+      varPercent = 1.65 * dailyVol * 100;
+    }
+    
     const varValue = (totalTradeValue * varPercent) / 100;
 
     return {
@@ -104,7 +131,7 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
     };
   };
 
-  const riskMetrics = calculateRiskMetrics(candles);
+  const riskMetrics = calculateRiskMetrics(candles, varMethod);
 
   const baseBeta = riskMetrics.annualizedVol / 20;
   const simulatedBeta = Math.max(0.5, Math.min(2.5, baseBeta));
@@ -142,18 +169,45 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
     setPortfolioLoading(true);
     setPortfolioError(null);
     try {
+      // 1. Fetch historical candles for each ticker concurrently (with cache lookup)
       const promises = portfolio.map(async (item) => {
-        const res = await fetch(`http://localhost:5000/api/stock/${item.symbol}/history?interval=1d`);
-        const data = await res.json();
-        if (!data.success) {
-          throw new Error(`Failed to fetch history for ${item.symbol}`);
+        const sym = item.symbol.trim().toUpperCase();
+        
+        // Cache hit
+        const cached = historyCache.current[sym];
+        if (cached && cached.length > 0) {
+          return { symbol: sym, weight: item.weight, candles: cached, success: true };
         }
-        return { symbol: item.symbol, weight: item.weight, candles: data.candles };
+        
+        // Cache miss -> fetch from backend API
+        try {
+          const res = await fetch(`http://localhost:5000/api/stock/${sym}/history?interval=1d`);
+          const data = await res.json();
+          if (!data.success) {
+            return { symbol: sym, weight: item.weight, error: data.error || 'Failed to fetch history', success: false };
+          }
+          // Store in client cache
+          historyCache.current[sym] = data.candles;
+          return { symbol: sym, weight: item.weight, candles: data.candles, success: true };
+        } catch (err) {
+          return { symbol: sym, weight: item.weight, error: err.message, success: false };
+        }
       });
 
-      const results = await Promise.all(promises);
+      // Execute fetches in parallel (Structured Promise.allSettled behavior)
+      const settledResults = await Promise.all(promises);
 
-      const alignedReturns = results.map(res => {
+      const successes = settledResults.filter(r => r.success);
+      const failures = settledResults.filter(r => !r.success);
+
+      setFailedAssets(failures.map(f => f.symbol));
+
+      if (successes.length === 0) {
+        throw new Error("Failed to load any valid asset historical data.");
+      }
+
+      // 2. Align daily returns over last 30 days
+      const alignedReturns = successes.map(res => {
         const last30 = res.candles.slice(-30);
         const returns = [];
         for (let i = 1; i < last30.length; i++) {
@@ -166,9 +220,10 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
 
       const minLen = Math.min(...alignedReturns.map(r => r.returns.length));
       if (minLen < 5) {
-        throw new Error("Insufficient historical data overlap for correlation analysis.");
+        throw new Error("Insufficient historical overlap between portfolio holdings.");
       }
 
+      // Truncate series to minimum length for index alignment
       alignedReturns.forEach(r => {
         r.returns = r.returns.slice(-minLen);
       });
@@ -187,7 +242,7 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
         };
       });
 
-      // Pearson correlation matrix
+      // 3. Pearson correlation matrix
       const correlationMatrix = {};
       for (let i = 0; i < stats.length; i++) {
         correlationMatrix[stats[i].symbol] = {};
@@ -218,12 +273,11 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
         }
       }
 
-      // Portfolio daily volatility using covariance formula
+      // 4. Calculate Portfolio Volatility using Covariance matrix
       let portfolioVariance = 0;
-      const normalizedWeights = stats.map(s => s.weight / 100);
-
-      // Sum weights to verify
-      const totalWeight = stats.reduce((sum, s) => sum + s.weight, 0);
+      // Re-normalize weights based on successfully loaded assets
+      const successWeightSum = stats.reduce((sum, s) => sum + s.weight, 0);
+      const normalizedWeights = stats.map(s => successWeightSum > 0 ? (s.weight / successWeightSum) : 0);
 
       for (let i = 0; i < stats.length; i++) {
         const w_i = normalizedWeights[i];
@@ -241,22 +295,82 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
       const portfolioDailyVol = Math.sqrt(portfolioVariance);
       const portfolioAnnualVol = portfolioDailyVol * Math.sqrt(252);
 
-      // Diversified VaR (based on portfolio volatility)
-      const portfolioVarPercent = 1.65 * portfolioDailyVol * 100;
+      // Compute actual portfolio returns series
+      const portfolioReturnsSeries = [];
+      for (let k = 0; k < minLen; k++) {
+        let r_p = 0;
+        for (let i = 0; i < stats.length; i++) {
+          r_p += normalizedWeights[i] * stats[i].returns[k];
+        }
+        portfolioReturnsSeries.push(r_p);
+      }
+
+      // 5. Value-at-Risk (VaR) method routing
+      let portfolioVarPercent;
+      if (varMethod === 'HISTORICAL') {
+        // Historical VaR (95% confidence) -> 5th percentile of actual portfolio returns series
+        const sortedP = [...portfolioReturnsSeries].sort((a, b) => a - b);
+        const pIndex = Math.floor(sortedP.length * 0.05);
+        portfolioVarPercent = Math.abs(sortedP[pIndex] || 0) * 100;
+      } else {
+        // Parametric VaR (95% confidence)
+        portfolioVarPercent = 1.65 * portfolioDailyVol * 100;
+      }
+      
       const portfolioVarValue = (capital * portfolioVarPercent) / 100;
 
-      // Undiversified VaR (weighted sum of individual VaRs)
+      // 6. Risk Contribution / Component VaR calculations
+      const marginalContributions = stats.map((s_i, i) => {
+        let sum = 0;
+        for (let j = 0; j < stats.length; j++) {
+          const w_j = normalizedWeights[j];
+          const vol_i = s_i.dailyVol;
+          const vol_j = stats[j].dailyVol;
+          const corr_ij = correlationMatrix[s_i.symbol][stats[j].symbol];
+          const cov_ij = corr_ij * vol_i * vol_j;
+          sum += w_j * cov_ij;
+        }
+        return portfolioDailyVol > 0 ? (sum / portfolioDailyVol) : 0;
+      });
+
+      const riskContributions = stats.map((s_i, i) => {
+        const w_i = normalizedWeights[i];
+        const mc = marginalContributions[i];
+        const rcPercent = portfolioDailyVol > 0 ? ((w_i * mc) / portfolioDailyVol) * 100 : 0;
+        const rcValue = (rcPercent * portfolioVarValue) / 100;
+        return {
+          symbol: s_i.symbol,
+          rcPercent,
+          rcValue
+        };
+      });
+
+      // Individual undiversified VaR
       const individualVaRs = stats.map(s => {
-        const varPercent = 1.65 * s.dailyVol * 100;
+        let varPercent;
+        if (varMethod === 'HISTORICAL') {
+          const sortedS = [...s.returns].sort((a, b) => a - b);
+          const sIndex = Math.floor(sortedS.length * 0.05);
+          varPercent = Math.abs(sortedS[sIndex] || 0) * 100;
+        } else {
+          varPercent = 1.65 * s.dailyVol * 100;
+        }
         const varValue = (capital * (s.weight / 100) * varPercent) / 100;
         return { symbol: s.symbol, value: varValue, percent: varPercent };
       });
+
       const undiversifiedVarValue = individualVaRs.reduce((sum, v) => sum + v.value, 0);
       const diversificationBenefit = undiversifiedVarValue - portfolioVarValue;
 
+      // 7. Estimated Annualized Sharpe Ratio (Assuming standard 6% Indian Risk-Free Rate)
+      const pDailyMean = portfolioReturnsSeries.reduce((sum, v) => sum + v, 0) / minLen;
+      const pAnnualizedReturn = pDailyMean * 252;
+      const riskFreeRate = 0.06;
+      const sharpeRatio = portfolioAnnualVol > 0 ? (pAnnualizedReturn - riskFreeRate) / portfolioAnnualVol : 0;
+
       setPortfolioResults({
         stats,
-        totalWeight,
+        totalWeight: successes.reduce((sum, s) => sum + s.weight, 0),
         correlationMatrix,
         portfolioDailyVol: portfolioDailyVol * 100,
         portfolioAnnualVol: portfolioAnnualVol * 100,
@@ -264,7 +378,9 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
         portfolioVarValue,
         undiversifiedVarValue,
         diversificationBenefit,
-        individualVaRs
+        individualVaRs,
+        riskContributions,
+        sharpeRatio
       });
     } catch (err) {
       console.error("Portfolio simulation error:", err);
@@ -298,6 +414,26 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
   const updateWeight = (index, val) => {
     const w = Math.max(0, Math.min(100, parseInt(val) || 0));
     setPortfolio(prev => prev.map((item, idx) => idx === index ? { ...item, weight: w } : item));
+  };
+
+  // Normalizes portfolio weights to sum to exactly 100%
+  const normalizeWeights = () => {
+    const sum = portfolio.reduce((acc, item) => acc + item.weight, 0);
+    if (sum <= 0) return;
+    
+    let normalized = portfolio.map(item => ({
+      ...item,
+      weight: Math.round((item.weight * 100) / sum)
+    }));
+
+    // Adjust rounding difference on the first asset
+    const newSum = normalized.reduce((acc, item) => acc + item.weight, 0);
+    if (newSum !== 100 && normalized.length > 0) {
+      normalized[0].weight += (100 - newSum);
+    }
+
+    setPortfolio(normalized);
+    setPortfolioError(null);
   };
 
   const cleanSymbol = selectedSymbol ? selectedSymbol.split('.')[0] : '';
@@ -368,8 +504,29 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
           </div>
         </div>
 
+        {/* Risk Calculation Model Selector */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'hsla(224, 60%, 8%, 0.4)', padding: '0.45rem 0.75rem', borderRadius: '10px', border: '1px solid var(--card-border)' }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Risk Model:</span>
+          <div className="timeframe-container" style={{ padding: '0.15rem' }}>
+            <button
+              className={`timeframe-btn ${varMethod === 'PARAMETRIC' ? 'active' : ''}`}
+              style={{ padding: '0.25rem 0.5rem', fontSize: '0.68rem' }}
+              onClick={() => setVarMethod('PARAMETRIC')}
+            >
+              Parametric (Normal)
+            </button>
+            <button
+              className={`timeframe-btn ${varMethod === 'HISTORICAL' ? 'active' : ''}`}
+              style={{ padding: '0.25rem 0.5rem', fontSize: '0.68rem' }}
+              onClick={() => setVarMethod('HISTORICAL')}
+            >
+              Historical (Fat-Tailed)
+            </button>
+          </div>
+        </div>
+
         {/* Sub-tabs Toggle */}
-        <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid var(--card-border)', paddingBottom: '0.5rem', marginTop: '0.2rem' }}>
+        <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid var(--card-border)', paddingBottom: '0.5rem', marginTop: '0.1rem' }}>
           <button
             className={`timeframe-btn ${riskTab === 'POSITION' ? 'active' : ''}`}
             style={{ flex: 1, padding: '0.45rem', fontSize: '0.72rem' }}
@@ -552,7 +709,9 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
                   <Shield size={14} style={{ color: 'var(--color-accent)' }} />
                   Aladdin Risk Engine (1-Day VaR)
                 </span>
-                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Monte Carlo</span>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Model: {varMethod === 'HISTORICAL' ? 'Historical' : 'Parametric'}
+                </span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'hsla(224, 60%, 5%, 0.4)', padding: '0.65rem', borderRadius: '8px' }}>
@@ -578,7 +737,7 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
               </div>
 
               {/* Stress Test Matrix */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3.rem', marginTop: '0.1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.1rem' }}>
                 <div style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                   Macro Stress Tests (Simulated Beta: {simulatedBeta.toFixed(2)})
                 </div>
@@ -609,44 +768,49 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
               <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem', justifyContent: 'space-between' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <Coins size={14} style={{ color: 'var(--color-accent)' }} />
-                  Portfolio Allocation Weights
+                  Portfolio Holdings & Allocation
                 </span>
-                <span style={{ fontSize: '0.65rem', color: portfolioResults?.totalWeight === 100 ? 'var(--color-bullish)' : 'var(--color-bearish)' }}>
+                <span style={{ fontSize: '0.65rem', color: portfolioResults?.totalWeight === 100 ? 'var(--color-bullish)' : 'var(--color-warning)' }}>
                   Total: {portfolioResults ? portfolioResults.totalWeight : portfolio.reduce((sum, item) => sum + item.weight, 0)}%
                 </span>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.15rem' }}>
-                {portfolio.map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'hsla(224, 50%, 10%, 0.35)', padding: '0.35rem 0.55rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.02)' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', flex: 1, textAlign: 'left' }}>
-                      {item.symbol.split('.')[0]} {idx === 0 && <span style={{ fontSize: '0.6rem', color: 'var(--color-accent)' }}>(Active)</span>}
-                    </span>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        className="setting-input"
-                        style={{ width: '55px', padding: '0.2rem 0.4rem', textAlign: 'center', fontSize: '0.75rem', height: '24px' }}
-                        value={item.weight}
-                        onChange={(e) => updateWeight(idx, e.target.value)}
-                      />
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>%</span>
-                    </div>
+                {portfolio.map((item, idx) => {
+                  const hasFailed = failedAssets.includes(item.symbol);
+                  return (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'hsla(224, 50%, 10%, 0.35)', padding: '0.35rem 0.55rem', borderRadius: '6px', border: hasFailed ? '1px solid var(--color-bearish)' : '1px solid rgba(255,255,255,0.02)' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', flex: 1, textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        {item.symbol.split('.')[0]} 
+                        {idx === 0 && <span style={{ fontSize: '0.6rem', color: 'var(--color-accent)' }}>(Active)</span>}
+                        {hasFailed && <span style={{ fontSize: '0.6rem', color: 'var(--color-bearish)', fontWeight: 'bold' }}>(Fetch Error)</span>}
+                      </span>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          className="setting-input"
+                          style={{ width: '55px', padding: '0.2rem 0.4rem', textAlign: 'center', fontSize: '0.75rem', height: '24px' }}
+                          value={item.weight}
+                          onChange={(e) => updateWeight(idx, e.target.value)}
+                        />
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>%</span>
+                      </div>
 
-                    {idx !== 0 && (
-                      <button 
-                        onClick={() => removeAsset(idx)} 
-                        style={{ background: 'transparent', border: 'none', color: 'var(--color-bearish)', cursor: 'pointer', padding: '0.15rem', display: 'flex', alignItems: 'center' }}
-                        title="Remove from portfolio"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                      {idx !== 0 && (
+                        <button 
+                          onClick={() => removeAsset(idx)} 
+                          style={{ background: 'transparent', border: 'none', color: 'var(--color-bearish)', cursor: 'pointer', padding: '0.15rem', display: 'flex', alignItems: 'center' }}
+                          title="Remove from portfolio"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Add asset row */}
@@ -680,24 +844,33 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
                 </button>
               </div>
 
-              <button 
-                className="btn-primary" 
-                style={{ padding: '0.45rem', fontSize: '0.75rem', marginTop: '0.3rem', height: '32px' }}
-                onClick={runPortfolioSimulation}
-                disabled={portfolioLoading}
-              >
-                {portfolioLoading ? (
-                  <>
-                    <RefreshCw size={12} className="spin-anim" />
-                    Simulating Risk...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw size={12} />
-                    Run Risk Simulation
-                  </>
-                )}
-              </button>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.3rem' }}>
+                <button 
+                  className="timeframe-btn"
+                  style={{ height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', border: '1px solid var(--card-border)', background: 'hsla(224, 50%, 15%, 0.3)' }}
+                  onClick={normalizeWeights}
+                >
+                  Normalize Weights
+                </button>
+                <button 
+                  className="btn-primary" 
+                  style={{ padding: '0.45rem', fontSize: '0.75rem', margin: 0, height: '32px' }}
+                  onClick={runPortfolioSimulation}
+                  disabled={portfolioLoading}
+                >
+                  {portfolioLoading ? (
+                    <>
+                      <RefreshCw size={12} className="spin-anim" />
+                      Simulating...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={12} />
+                      Run Risk Models
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             {portfolioError && (
@@ -756,31 +929,62 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
                         }} 
                       />
                     </div>
-                    <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', display: 'block', textAlign: 'left', marginTop: '0.05rem' }}>
-                      Red: Actual Diversified Risk. Green: Risk Eliminated (Uncorrelated Hedging benefit).
-                    </span>
                   </div>
                 </div>
 
-                {/* Portfolio Annualized Volatility details */}
+                {/* Sharpe Ratio details */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'hsla(224, 50%, 15%, 0.15)', padding: '0.65rem 0.85rem', borderRadius: '10px', border: '1px solid var(--card-border)' }}>
                   <div style={{ textAlign: 'left' }}>
-                    <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', display: 'block' }}>Portfolio Annualized Vol</span>
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', display: 'block' }}>Annualized Portfolio Vol</span>
                     <span style={{ fontSize: '0.9rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                       {portfolioResults.portfolioAnnualVol.toFixed(2)}%
                     </span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', display: 'block' }}>Daily Vol (Portfolio StdDev)</span>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                      {portfolioResults.portfolioDailyVol.toFixed(2)}%
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', display: 'block' }}>Est. Sharpe Ratio (6% Rf)</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: portfolioResults.sharpeRatio >= 1.0 ? 'var(--color-bullish)' : portfolioResults.sharpeRatio > 0 ? 'var(--text-primary)' : 'var(--color-bearish)' }}>
+                      {portfolioResults.sharpeRatio.toFixed(2)}
                     </span>
+                  </div>
+                </div>
+
+                {/* Risk Contribution vs Allocation Weight */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    Risk Contribution vs Allocation Weight
+                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', background: 'hsla(224, 50%, 15%, 0.15)', padding: '0.75rem', borderRadius: '10px', border: '1px solid var(--card-border)' }}>
+                    {portfolioResults.individualVaRs.map((v_item, idx) => {
+                      const rc = portfolioResults.riskContributions[idx];
+                      const weight = portfolio.find(p => p.symbol === v_item.symbol)?.weight || 0;
+                      const isDisproportionate = rc.rcPercent > weight;
+                      
+                      return (
+                        <div key={v_item.symbol} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{v_item.symbol.split('.')[0]}</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                              Alloc: {weight}% | Risk: {rc.rcPercent.toFixed(1)}% (₹{rc.rcValue.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                            </span>
+                          </div>
+                          {/* Double progress bar: blue for allocation, amber/red for risk contribution */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', background: 'hsla(224, 50%, 5%, 0.4)', borderRadius: '4px', padding: '2px' }}>
+                            <div style={{ display: 'flex', height: '4px', width: '100%' }}>
+                              <div style={{ width: `${weight}%`, background: 'var(--color-accent)', borderRadius: '2px' }} />
+                            </div>
+                            <div style={{ display: 'flex', height: '4px', width: '100%' }}>
+                              <div style={{ width: `${rc.rcPercent}%`, background: isDisproportionate ? 'var(--color-bearish)' : 'var(--color-bullish)', borderRadius: '2px' }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* Asset correlation matrix grid */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', gap: '0.2' }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                     <Info size={11} style={{ color: 'var(--color-accent)' }} />
                     Asset Correlation Matrix (Log-Returns)
                   </div>
@@ -844,7 +1048,7 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
             {portfolio.reduce((sum, item) => sum + item.weight, 0) !== 100 && (
               <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', padding: '0.45rem 0.65rem', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', color: 'var(--color-warning)', fontSize: '0.68rem' }}>
                 <AlertTriangle size={12} style={{ flexShrink: 0 }} />
-                <span>Allocation Error: Weights must sum to exactly 100% to run standard risk models (current: {portfolio.reduce((sum, item) => sum + item.weight, 0)}%).</span>
+                <span>Allocation Warning: Weights sum to {portfolio.reduce((sum, item) => sum + item.weight, 0)}% (should equal 100%). You can click **Normalize Weights** to balance it.</span>
               </div>
             )}
 
