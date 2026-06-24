@@ -13,6 +13,25 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Backend news caching to speed up polling and prevent Yahoo Finance rate limits
+const newsCache = {};
+const NEWS_CACHE_TTL = 3 * 60 * 1000; // 3 minutes TTL
+
+async function getNewsSentimentCached(symbol) {
+  const sym = symbol.trim().toUpperCase();
+  const cached = newsCache[sym];
+  if (cached && (Date.now() - cached.timestamp < NEWS_CACHE_TTL)) {
+    return cached.data;
+  }
+
+  const newsData = await fetchStockNews(sym);
+  newsCache[sym] = {
+    data: newsData,
+    timestamp: Date.now()
+  };
+  return newsData;
+}
+
 // Enable CORS so the React frontend (running on a different port like 5173) can access the API
 app.use(cors());
 app.use(express.json());
@@ -34,8 +53,8 @@ app.get('/api/stock/:symbol/history', async (req, res) => {
   const { interval = '1d', years = 5 } = req.query;
 
   try {
-    // Fetch news sentiment first to pass to signals
-    const newsData = await fetchStockNews(symbol);
+    // Fetch news sentiment from cache first to pass to signals
+    const newsData = await getNewsSentimentCached(symbol);
     const newsSentimentScore = newsData ? newsData.sentimentScore : 50;
 
     const rawCandles = await fetchStockData(symbol, interval, Number(years));
@@ -67,7 +86,7 @@ app.get('/api/stock/:symbol/intelligence', async (req, res) => {
   const { symbol } = req.params;
 
   try {
-    const newsData = await fetchStockNews(symbol);
+    const newsData = await getNewsSentimentCached(symbol);
     
     // Fetch 1 year of daily historical candles to compute support & resistance and range
     const rawCandles = await fetchStockData(symbol, '1d', 1);
@@ -112,7 +131,7 @@ app.get('/api/stock/:symbol/intelligence', async (req, res) => {
       recommendation: label,
       newsSentiment: newsData.newsSentiment,
       newsSentimentScore: newsData.sentimentScore,
-      newsMetrics: newsData.metrics,
+      newsMetrics: newsData.newsMetrics || newsData.metrics,
       articles: newsData.articles,
       predictiveTrend
     });
@@ -286,6 +305,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;

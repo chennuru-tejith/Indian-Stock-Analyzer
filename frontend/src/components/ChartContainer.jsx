@@ -17,6 +17,7 @@ export default function ChartContainer({
   
   // Chart Type: 'FUSION' (Custom indicator chart) | 'LIVE' (TradingView Embed)
   const [chartType, setChartType] = useState('FUSION');
+  const [showPatterns, setShowPatterns] = useState(true);
 
   useEffect(() => {
     // Only initialize custom chart if FUSION type is active and we have candles
@@ -171,6 +172,42 @@ export default function ChartContainer({
           size: 1.2
         });
       }
+
+      // Add Candlestick Pattern Overlay if enabled
+      if (showPatterns && c.patterns && c.patterns.length > 0) {
+        const pattern = c.patterns[0];
+        let position = 'belowBar';
+        if (pattern.type === 'bearish') {
+          position = 'aboveBar';
+        } else if (pattern.type === 'bullish') {
+          position = 'belowBar';
+        } else {
+          position = 'belowBar';
+        }
+
+        // Collision avoidance: shift if signal marker occupies same position
+        if (isNewBuy && position === 'belowBar') {
+          position = 'aboveBar';
+        } else if (isNewSell && position === 'aboveBar') {
+          position = 'belowBar';
+        }
+
+        let color = '#f59e0b'; // neutral default
+        if (pattern.type === 'bullish') {
+          color = '#10b981';
+        } else if (pattern.type === 'bearish') {
+          color = '#ef4444';
+        }
+
+        markers.push({
+          time: c.time,
+          position: position,
+          color: color,
+          shape: 'circle',
+          text: pattern.name,
+          size: 1.0
+        });
+      }
     });
 
     if (markers.length > 0) {
@@ -262,7 +299,7 @@ export default function ChartContainer({
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, interval, takeProfit, stopLoss, supportLevels, resistanceLevels, chartType]);
+  }, [candles, interval, takeProfit, stopLoss, supportLevels, resistanceLevels, chartType, showPatterns]);
 
   // Extract latest prices
   const latestCandle = candles[candles.length - 1];
@@ -319,14 +356,24 @@ export default function ChartContainer({
           </div>
 
           {chartType === 'FUSION' && (
-            <div className="chart-legend" style={{ marginLeft: '0.5rem' }}>
-              <div className="legend-item">
-                <span className="legend-dot" style={{ backgroundColor: '#3b82f6' }}></span>
-                <span>EMA 20</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot" style={{ backgroundColor: '#f59e0b' }}></span>
-                <span>SMA 200</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <button
+                onClick={() => setShowPatterns(!showPatterns)}
+                className={`timeframe-btn ${showPatterns ? 'active' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '4px 8px', fontSize: '0.75rem' }}
+              >
+                <Activity size={12} />
+                Patterns: {showPatterns ? 'ON' : 'OFF'}
+              </button>
+              <div className="chart-legend" style={{ marginLeft: '0.5rem' }}>
+                <div className="legend-item">
+                  <span className="legend-dot" style={{ backgroundColor: '#3b82f6' }}></span>
+                  <span>EMA 20</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-dot" style={{ backgroundColor: '#f59e0b' }}></span>
+                  <span>SMA 200</span>
+                </div>
               </div>
             </div>
           )}

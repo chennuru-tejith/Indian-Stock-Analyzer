@@ -1,6 +1,20 @@
+import { jest } from '@jest/globals';
+import request from 'supertest';
 import { calculateSMA, calculateEMA, calculateRSI } from '../services/indicatorService.js';
 import { detectPatterns } from '../services/patternService.js';
 import { generateSignals } from '../services/signalService.js';
+
+jest.unstable_mockModule('../services/dataService.js', () => ({
+  fetchStockData: jest.fn(),
+  fetchRealTimeQuote: jest.fn(),
+  fetchStockNews: jest.fn(),
+  yahooFinance: {
+    search: jest.fn()
+  }
+}));
+
+const { default: app } = await import('../server.js');
+const dataService = await import('../services/dataService.js');
 
 describe('Technical Indicator Calculations', () => {
   test('calculateSMA returns correct simple moving averages', () => {
@@ -106,5 +120,65 @@ describe('Signal Fusion and Verification', () => {
 
     expect(lastCandle.signal).toBe('BUY');
     expect(lastCandle.confidence).toBe('HIGH');
+  });
+});
+
+describe('API Endpoint Integration Tests', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('GET /api/stock/:symbol/history returns candles populated with indicators, signals, and patterns', async () => {
+    // Generate 205 mock candles to calculate indicators (needs > 200 candles)
+    const mockRawCandles = Array.from({ length: 205 }, (_, idx) => {
+      const date = new Date(2026, 0, idx + 1).toISOString().split('T')[0];
+      if (idx === 203) {
+        // Bearish candle
+        return { time: date, open: 100, high: 102, low: 88, close: 90, volume: 100 };
+      }
+      if (idx === 204) {
+        // Engulfing Bullish
+        return { time: date, open: 89, high: 105, low: 88, close: 103, volume: 200 };
+      }
+      return { time: date, open: 100, high: 100, low: 100, close: 100, volume: 100 };
+    });
+
+    dataService.fetchStockData.mockResolvedValue(mockRawCandles);
+    dataService.fetchStockNews.mockResolvedValue({
+      sentimentScore: 75,
+      newsSentiment: 'BULLISH',
+      metrics: { bullishCount: 3, bearishCount: 0, neutralCount: 1 },
+      articles: []
+    });
+
+    const response = await request(app)
+      .get('/api/stock/TCS.NS/history')
+      .query({ interval: '1d', years: 1 });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.symbol).toBe('TCS.NS');
+    expect(response.body.interval).toBe('1d');
+    expect(response.body.newsSentimentScore).toBe(75);
+    expect(response.body.count).toBe(205);
+
+    const candles = response.body.candles;
+    expect(candles).toBeInstanceOf(Array);
+    expect(candles.length).toBe(205);
+
+    // Verify indicators are populated on later candles
+    const lastCandle = candles[204];
+    expect(lastCandle).toHaveProperty('sma200');
+    expect(lastCandle).toHaveProperty('ema20');
+    expect(lastCandle).toHaveProperty('rsi');
+    expect(lastCandle).toHaveProperty('macd');
+    expect(lastCandle).toHaveProperty('patterns');
+    expect(lastCandle).toHaveProperty('signal');
+    expect(lastCandle).toHaveProperty('score');
+
+    // Verify the patterns field contains the detected pattern
+    expect(lastCandle.patterns).toContainEqual(
+      expect.objectContaining({ name: 'Bullish Engulfing', type: 'bullish' })
+    );
   });
 });
