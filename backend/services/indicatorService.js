@@ -135,6 +135,9 @@ export function calculateMACD(values, fastPeriod = 12, slowPeriod = 26, signalPe
 
   // Filter out nulls from the beginning of macdLine for the signal calculation
   const validMacdStartIndex = macdLine.findIndex(val => val !== null);
+  if (validMacdStartIndex === -1) {
+    return macd;
+  }
   const validMacdLine = macdLine.slice(validMacdStartIndex);
   const validSignalEma = calculateEMA(validMacdLine, signalPeriod);
 

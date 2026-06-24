@@ -55,12 +55,12 @@ export function calculatePredictiveTrend(stockSymbol, localIntel, globalMacro) {
     symbolMap[asset.symbol] = asset;
   });
 
-  const sp500 = symbolMap['^GSPC'] || { changePercent: 0 };
-  const nasdaq = symbolMap['^IXIC'] || { changePercent: 0 };
-  const crude = symbolMap['CL=F'] || { changePercent: 0 };
-  const usdinr = symbolMap['USDINR=X'] || { changePercent: 0 };
-  const gold = symbolMap['GC=F'] || { changePercent: 0 };
-  const us10y = symbolMap['^TNX'] || { changePercent: 0 };
+  const sp500 = symbolMap['^GSPC'] || { price: 0, changePercent: 0 };
+  const nasdaq = symbolMap['^IXIC'] || { price: 0, changePercent: 0 };
+  const crude = symbolMap['CL=F'] || { price: 0, changePercent: 0 };
+  const usdinr = symbolMap['USDINR=X'] || { price: 0, changePercent: 0 };
+  const gold = symbolMap['GC=F'] || { price: 0, changePercent: 0 };
+  const us10y = symbolMap['^TNX'] || { price: 0, changePercent: 0 };
 
   // 1. Calculate weighted scores from -100 to 100 for each asset
   // Volatility scaling: We scale the percentage changes to map typical daily moves to -100..100
@@ -163,7 +163,7 @@ export function calculatePredictiveTrend(stockSymbol, localIntel, globalMacro) {
   }
 
   if (us10y.changePercent > 0.8) {
-    reasoning += `The sharp increase in the US 10-Year Bond Yield (+${(us10y.changePercent || 0).toFixed(2)}% to ${us10y.price.toFixed(3)}%) serves as a macro warning, creating valuation pressures on high-growth companies. `;
+    reasoning += `The sharp increase in the US 10-Year Bond Yield (+${(us10y.changePercent || 0).toFixed(2)}% to ${(us10y.price || 0).toFixed(3)}%) serves as a macro warning, creating valuation pressures on high-growth companies. `;
   }
 
   reasoning += `Considering these factors, our predictive model projects a ${projectedTrend.toLowerCase()} with a confidence level of ${confidence}%.`;

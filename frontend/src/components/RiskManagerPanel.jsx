@@ -483,19 +483,27 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
                   {multiTimeframeData.timeframes.map((tf) => (
                     <tr key={tf.interval}>
                       <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{tf.interval.toUpperCase()}</td>
-                      <td>₹{tf.price?.toFixed(1) || 'N/A'}</td>
-                      <td style={{ fontWeight: 600, color: tf.score >= 60 ? 'var(--color-bullish)' : tf.score <= 40 ? 'var(--color-bearish)' : 'var(--text-secondary)' }}>
-                        {tf.score || 'N/A'}
-                      </td>
-                      <td style={{ color: getRsiColor(tf.rsi) }}>{tf.rsi ? tf.rsi.toFixed(0) : 'N/A'}</td>
-                      <td>
-                        <span className={getSignalBadgeClass(tf.signal)} style={{ padding: '0.1rem 0.35rem', fontSize: '0.62rem' }}>
-                          {tf.signal}
-                        </span>
-                      </td>
-                      <td style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '60px' }} title={tf.pattern}>
-                        {tf.pattern !== 'None' ? tf.pattern : '-'}
-                      </td>
+                      {tf.error ? (
+                        <td colSpan={5} style={{ color: 'var(--color-bearish)', fontSize: '0.65rem', textAlign: 'left', fontStyle: 'italic' }}>
+                          Error loading data
+                        </td>
+                      ) : (
+                        <>
+                          <td>₹{tf.price?.toFixed(1) || 'N/A'}</td>
+                          <td style={{ fontWeight: 600, color: tf.score >= 60 ? 'var(--color-bullish)' : tf.score <= 40 ? 'var(--color-bearish)' : 'var(--text-secondary)' }}>
+                            {tf.score || 'N/A'}
+                          </td>
+                          <td style={{ color: getRsiColor(tf.rsi) }}>{tf.rsi ? tf.rsi.toFixed(0) : 'N/A'}</td>
+                          <td>
+                            <span className={getSignalBadgeClass(tf.signal)} style={{ padding: '0.1rem 0.35rem', fontSize: '0.62rem' }}>
+                              {tf.signal || 'HOLD'}
+                            </span>
+                          </td>
+                          <td style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '60px' }} title={tf.pattern}>
+                            {tf.pattern !== 'None' && tf.pattern ? tf.pattern : '-'}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
