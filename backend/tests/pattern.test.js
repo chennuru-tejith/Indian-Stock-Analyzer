@@ -94,6 +94,98 @@ describe('Candlestick Pattern Detection', () => {
       expect.objectContaining({ name: 'Hammer Shape', type: 'neutral' })
     );
   });
+
+  test('detects Piercing Line pattern correctly', () => {
+    const mockCandles = [
+      { time: '2026-06-01', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-02', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-03', open: 100, high: 102, low: 88, close: 90, volume: 100 },
+      { time: '2026-06-04', open: 88, high: 98, low: 86, close: 96, volume: 100 }
+    ];
+    const result = detectPatterns(mockCandles);
+    expect(result[3].patterns).toContainEqual(
+      expect.objectContaining({ name: 'Piercing Line', type: 'bullish' })
+    );
+  });
+
+  test('detects Dark Cloud Cover pattern correctly', () => {
+    const mockCandles = [
+      { time: '2026-06-01', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-02', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-03', open: 90, high: 102, low: 88, close: 100, volume: 100 },
+      { time: '2026-06-04', open: 102, high: 104, low: 92, close: 94, volume: 100 }
+    ];
+    const result = detectPatterns(mockCandles);
+    expect(result[3].patterns).toContainEqual(
+      expect.objectContaining({ name: 'Dark Cloud Cover', type: 'bearish' })
+    );
+  });
+
+  test('detects Three White Soldiers pattern correctly', () => {
+    const mockCandles = [
+      { time: '2026-06-01', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-02', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-03', open: 100, high: 109, low: 99, close: 108, volume: 100 },
+      { time: '2026-06-04', open: 103, high: 113, low: 102, close: 112, volume: 100 },
+      { time: '2026-06-05', open: 107, high: 119, low: 106, close: 118, volume: 100 }
+    ];
+    const result = detectPatterns(mockCandles);
+    expect(result[4].patterns).toContainEqual(
+      expect.objectContaining({ name: 'Three White Soldiers', type: 'bullish' })
+    );
+  });
+
+  test('detects Three Black Crows pattern correctly', () => {
+    const mockCandles = [
+      { time: '2026-06-01', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-02', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-03', open: 100, high: 101, low: 91, close: 92, volume: 100 },
+      { time: '2026-06-04', open: 97, high: 98, low: 87, close: 88, volume: 100 },
+      { time: '2026-06-05', open: 93, high: 94, low: 81, close: 82, volume: 100 }
+    ];
+    const result = detectPatterns(mockCandles);
+    expect(result[4].patterns).toContainEqual(
+      expect.objectContaining({ name: 'Three Black Crows', type: 'bearish' })
+    );
+  });
+
+  test('detects Tweezer Bottom pattern correctly', () => {
+    const mockCandles = [
+      { time: '2026-06-01', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-02', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-03', open: 100, high: 101, low: 90, close: 92, volume: 100 },
+      { time: '2026-06-04', open: 92, high: 99, low: 90, close: 98, volume: 100 }
+    ];
+    const result = detectPatterns(mockCandles);
+    expect(result[3].patterns).toContainEqual(
+      expect.objectContaining({ name: 'Tweezer Bottom', type: 'bullish' })
+    );
+  });
+
+  test('detects Tweezer Top pattern correctly', () => {
+    const mockCandles = [
+      { time: '2026-06-01', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-02', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-03', open: 90, high: 100, low: 89, close: 98, volume: 100 },
+      { time: '2026-06-04', open: 98, high: 100, low: 91, close: 92, volume: 100 }
+    ];
+    const result = detectPatterns(mockCandles);
+    expect(result[3].patterns).toContainEqual(
+      expect.objectContaining({ name: 'Tweezer Top', type: 'bearish' })
+    );
+  });
+
+  test('detects Spinning Top pattern correctly', () => {
+    const mockCandles = [
+      { time: '2026-06-01', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-02', open: 100, high: 105, low: 95, close: 100, volume: 100 },
+      { time: '2026-06-03', open: 100, high: 106, low: 92, close: 98, volume: 100 }
+    ];
+    const result = detectPatterns(mockCandles);
+    expect(result[2].patterns).toContainEqual(
+      expect.objectContaining({ name: 'Spinning Top', type: 'neutral' })
+    );
+  });
 });
 
 describe('Signal Fusion and Verification', () => {

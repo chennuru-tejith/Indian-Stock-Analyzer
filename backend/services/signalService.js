@@ -86,7 +86,50 @@ export function generateSignals(enrichedCandles, options = {}) {
 
     // Candlestick Pattern matches S/R check
     patterns.forEach(p => {
-      if (p.name === 'Hammer Shape') {
+      if (p.name === 'Three White Soldiers') {
+        signal = 'BUY';
+        patternComponent += isNearSupport ? 50 : 35;
+        reasons.push(`Three White Soldiers pattern detected, indicating strong bullish trend acceleration.`);
+      }
+      else if (p.name === 'Three Black Crows') {
+        signal = 'SELL';
+        patternComponent -= isNearResistance ? 50 : 35;
+        reasons.push(`Three Black Crows pattern detected, indicating strong bearish trend reversal.`);
+      }
+      else if (p.name === 'Piercing Line') {
+        signal = 'BUY';
+        patternComponent += isNearSupport ? 45 : 30;
+        reasons.push(`Piercing Line pattern detected near support level (₹${nearestSupport.toFixed(2)}), suggesting buyers are regaining control.`);
+      }
+      else if (p.name === 'Dark Cloud Cover') {
+        signal = 'SELL';
+        patternComponent -= isNearResistance ? 45 : 30;
+        reasons.push(`Dark Cloud Cover pattern detected near resistance level (₹${nearestResistance.toFixed(2)}), suggesting selling pressure is taking over.`);
+      }
+      else if (p.name === 'Tweezer Bottom') {
+        signal = 'BUY';
+        patternComponent += isNearSupport ? 40 : 20;
+        reasons.push(`Tweezer Bottom pattern detected, indicating solid floor demand at ₹${candle.low.toFixed(2)}.`);
+      }
+      else if (p.name === 'Tweezer Top') {
+        signal = 'SELL';
+        patternComponent -= isNearResistance ? 40 : 20;
+        reasons.push(`Tweezer Top pattern detected, indicating ceiling supply at ₹${candle.high.toFixed(2)}.`);
+      }
+      else if (p.name === 'Spinning Top') {
+        if (rsi <= 35) {
+          signal = 'BUY';
+          patternComponent += 15;
+          reasons.push(`Spinning Top indecision pattern detected in oversold area, hinting at a potential bullish reversal.`);
+        } else if (rsi >= 65) {
+          signal = 'SELL';
+          patternComponent -= 15;
+          reasons.push(`Spinning Top indecision pattern detected in overbought area, hinting at a potential bearish reversal.`);
+        } else {
+          reasons.push(`Spinning Top indecision pattern detected, indicating balance between bulls and bears.`);
+        }
+      }
+      else if (p.name === 'Hammer Shape') {
         if (isNearSupport || rsi <= 40) {
           signal = 'BUY';
           patternComponent += 35;
