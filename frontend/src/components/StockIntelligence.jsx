@@ -29,7 +29,8 @@ export default function StockIntelligence({ data, loading }) {
     newsSentiment,
     newsSentimentScore,
     newsMetrics,
-    articles
+    articles,
+    projections
   } = data;
 
   // 52-week range percentage
@@ -76,7 +77,7 @@ export default function StockIntelligence({ data, loading }) {
         </span>
       </div>
 
-      <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', flex: 1 }}>
         {/* Recommendation Gauge */}
         <div style={{
           display: 'flex',
@@ -188,15 +189,130 @@ export default function StockIntelligence({ data, loading }) {
           </div>
         </div>
 
+        {/* AI Future Projections */}
+        {projections && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', borderTop: '1px solid var(--card-border)', paddingTop: '1rem' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Activity size={15} style={{ color: 'var(--color-accent)' }} />
+              AI Algorithmic Price Projections
+            </span>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              {/* Short Term (5-Day) Card */}
+              <div style={{
+                padding: '0.75rem',
+                borderRadius: '8px',
+                background: 'hsla(224, 50%, 12%, 0.4)',
+                border: '1px solid var(--card-border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.35rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>5-DAY FORECAST</span>
+                  <span style={{
+                    fontSize: '0.6rem',
+                    fontWeight: 700,
+                    padding: '0.1rem 0.35rem',
+                    borderRadius: '4px',
+                    color: projections.shortTerm.trend === 'BULLISH' ? 'var(--color-bullish)' : projections.shortTerm.trend === 'BEARISH' ? 'var(--color-bearish)' : 'var(--text-secondary)',
+                    background: projections.shortTerm.trend === 'BULLISH' ? 'rgba(16, 185, 129, 0.1)' : projections.shortTerm.trend === 'BEARISH' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(71, 85, 105, 0.15)'
+                  }}>
+                    {projections.shortTerm.trend}
+                  </span>
+                </div>
+                
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                  ₹{projections.shortTerm.targetMin} - ₹{projections.shortTerm.targetMax}
+                </div>
+                
+                <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)' }}>
+                  Confidence: {projections.shortTerm.confidence}% • Range: ±{projections.shortTerm.volRangePercent}%
+                </div>
+                
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', lineHeight: 1.35, marginTop: '0.15rem' }}>
+                  {projections.shortTerm.analysis}
+                </div>
+              </div>
+
+              {/* Medium Term (20-Day) Card */}
+              <div style={{
+                padding: '0.75rem',
+                borderRadius: '8px',
+                background: 'hsla(224, 50%, 12%, 0.4)',
+                border: '1px solid var(--card-border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.35rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>4-WEEK FORECAST</span>
+                  <span style={{
+                    fontSize: '0.6rem',
+                    fontWeight: 700,
+                    padding: '0.1rem 0.35rem',
+                    borderRadius: '4px',
+                    color: projections.mediumTerm.trend === 'BULLISH' ? 'var(--color-bullish)' : projections.mediumTerm.trend === 'BEARISH' ? 'var(--color-bearish)' : 'var(--text-secondary)',
+                    background: projections.mediumTerm.trend === 'BULLISH' ? 'rgba(16, 185, 129, 0.1)' : projections.mediumTerm.trend === 'BEARISH' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(71, 85, 105, 0.15)'
+                  }}>
+                    {projections.mediumTerm.trend}
+                  </span>
+                </div>
+                
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                  ₹{projections.mediumTerm.targetMin} - ₹{projections.mediumTerm.targetMax}
+                </div>
+                
+                <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)' }}>
+                  Confidence: {projections.mediumTerm.confidence}% • Range: ±{projections.mediumTerm.volRangePercent}%
+                </div>
+                
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', lineHeight: 1.35, marginTop: '0.15rem' }}>
+                  {projections.mediumTerm.analysis}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI report highlights & risk warnings */}
+        {projections && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', borderTop: '1px solid var(--card-border)', paddingTop: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-bullish)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <TrendingUp size={12} />
+                Bullish Analyst Highlights
+              </span>
+              <ul style={{ margin: 0, paddingLeft: '1rem', fontSize: '0.68rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.35rem', lineHeight: 1.35 }}>
+                {projections.highlights.map((h, i) => (
+                  <li key={i}>{h}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-bearish)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <TrendingDown size={12} />
+                Risk & Volatility Warnings
+              </span>
+              <ul style={{ margin: 0, paddingLeft: '1rem', fontSize: '0.68rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.35rem', lineHeight: 1.35 }}>
+                {projections.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
         {/* News & Sentiment Feed */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--card-border)', paddingTop: '1rem' }}>
           <div style={{
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
             fontSize: '0.8rem', 
             fontWeight: 600, 
-            marginBottom: '0.5rem'
+            marginBottom: '0.1rem'
           }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <BookOpen size={16} style={{ color: 'var(--color-accent)' }} />
@@ -214,7 +330,7 @@ export default function StockIntelligence({ data, loading }) {
             </span>
           </div>
 
-          <div className="trade-log-container" style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
             {articles.length === 0 ? (
               <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                 No recent news reports indexed for this symbol.

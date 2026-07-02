@@ -7,6 +7,7 @@ import { detectPatterns } from './services/patternService.js';
 import { generateSignals } from './services/signalService.js';
 import { runBacktest } from './services/backtestService.js';
 import { fetchGlobalIndicators, calculatePredictiveTrend } from './services/macroService.js';
+import { generateProjections } from './services/predictiveEngine.js';
 
 dotenv.config();
 
@@ -119,6 +120,23 @@ app.get('/api/stock/:symbol/intelligence', async (req, res) => {
       price: latestCandle.close
     }, globalMacro);
 
+    // Calculate daily returns volatility over the last 30 daily sessions
+    const last30 = signaledCandles.slice(-30);
+    const returns = [];
+    for (let i = 1; i < last30.length; i++) {
+      if (last30[i - 1].close > 0) {
+        returns.push((last30[i].close - last30[i - 1].close) / last30[i - 1].close);
+      }
+    }
+    let dailyVol = 0.018; // default 1.8% daily standard deviation
+    if (returns.length > 5) {
+      const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+      const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / (returns.length - 1);
+      dailyVol = Math.sqrt(variance);
+    }
+
+    const projections = generateProjections(latestCandle.close, dailyVol, newsData.articles, latestCandle.score, latestCandle);
+
     res.json({
       success: true,
       symbol: symbol.toUpperCase(),
@@ -133,7 +151,8 @@ app.get('/api/stock/:symbol/intelligence', async (req, res) => {
       newsSentimentScore: newsData.sentimentScore,
       newsMetrics: newsData.newsMetrics || newsData.metrics,
       articles: newsData.articles,
-      predictiveTrend
+      predictiveTrend,
+      projections
     });
   } catch (error) {
     console.error(`Error in /api/stock/${symbol}/intelligence:`, error.message);
