@@ -16,6 +16,7 @@ export function generateProjections(currentPrice, dailyVol, newsArticles = [], u
   // Ensure dailyVol is a valid positive number
   const vol = (typeof dailyVol === 'number' && !isNaN(dailyVol) && dailyVol > 0) ? dailyVol : 0.018; // Default 1.8% daily vol fallback
   const price = (typeof currentPrice === 'number' && currentPrice > 0) ? currentPrice : 100;
+  const score = (typeof unifiedScore === 'number' && !isNaN(unifiedScore)) ? Math.max(0, Math.min(100, unifiedScore)) : 50;
 
   // 1. Calculate price targets using Volatility-Scaling
   const getProjectionsForPeriod = (days) => {
@@ -27,10 +28,10 @@ export function generateProjections(currentPrice, dailyVol, newsArticles = [], u
     // Shift expected return midpoint based on unified quality score
     // Bullish score (>60) shifts target upward, bearish score (<40) shifts target downward
     let expectedReturnPercent = 0;
-    if (unifiedScore >= 60) {
-      expectedReturnPercent = ((unifiedScore - 50) / 50) * 5.5 * Math.sqrt(days / 5);
-    } else if (unifiedScore <= 40) {
-      expectedReturnPercent = ((unifiedScore - 50) / 50) * 5.5 * Math.sqrt(days / 5);
+    if (score >= 60) {
+      expectedReturnPercent = ((score - 50) / 50) * 5.5 * Math.sqrt(days / 5);
+    } else if (score <= 40) {
+      expectedReturnPercent = ((score - 50) / 50) * 5.5 * Math.sqrt(days / 5);
     }
 
     const midpoint = price * (1 + expectedReturnPercent / 100);
@@ -43,9 +44,9 @@ export function generateProjections(currentPrice, dailyVol, newsArticles = [], u
 
     let confidence = 70;
     if (trend === 'BULLISH') {
-      confidence = Math.min(95, Math.round(55 + (unifiedScore - 60) * 1.5 - (days > 5 ? 5 : 0)));
+      confidence = Math.min(95, Math.round(55 + (score - 60) * 1.5 - (days > 5 ? 5 : 0)));
     } else if (trend === 'BEARISH') {
-      confidence = Math.min(95, Math.round(55 + (40 - unifiedScore) * 1.5 - (days > 5 ? 5 : 0)));
+      confidence = Math.min(95, Math.round(55 + (40 - score) * 1.5 - (days > 5 ? 5 : 0)));
     }
 
     return {

@@ -34,7 +34,7 @@ export function runBacktest(signaledCandles, options = {}) {
 
       // Check Stop Loss hit
       if (nextCandle.low <= targetSLPrice) {
-        const exitPrice = targetSLPrice;
+        const exitPrice = nextCandle.open <= targetSLPrice ? nextCandle.open : targetSLPrice;
         const profit = exitPrice - entryPrice;
         const returnPercent = (profit / entryPrice) * 100;
         capital = capital * (1 + returnPercent / 100);
@@ -53,7 +53,7 @@ export function runBacktest(signaledCandles, options = {}) {
       } 
       // Check Take Profit hit
       else if (nextCandle.high >= targetTPPrice) {
-        const exitPrice = targetTPPrice;
+        const exitPrice = nextCandle.open >= targetTPPrice ? nextCandle.open : targetTPPrice;
         const profit = exitPrice - entryPrice;
         const returnPercent = (profit / entryPrice) * 100;
         capital = capital * (1 + returnPercent / 100);

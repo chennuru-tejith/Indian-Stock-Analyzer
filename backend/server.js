@@ -59,6 +59,12 @@ app.get('/api/stock/:symbol/history', async (req, res) => {
     const newsSentimentScore = newsData ? newsData.sentimentScore : 50;
 
     const rawCandles = await fetchStockData(symbol, interval, Number(years));
+    if (!rawCandles || rawCandles.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `No historical candles found for symbol ${symbol.toUpperCase()} at interval ${interval}.`
+      });
+    }
     const enrichedCandles = enrichWithIndicators(rawCandles);
     const patternedCandles = detectPatterns(enrichedCandles);
     const signaledCandles = generateSignals(patternedCandles, { newsSentimentScore });
@@ -91,6 +97,12 @@ app.get('/api/stock/:symbol/intelligence', async (req, res) => {
     
     // Fetch 1 year of daily historical candles to compute support & resistance and range
     const rawCandles = await fetchStockData(symbol, '1d', 1);
+    if (!rawCandles || rawCandles.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `Insufficient historical data to analyze symbol ${symbol.toUpperCase()}.`
+      });
+    }
     const enrichedCandles = enrichWithIndicators(rawCandles);
     const patternedCandles = detectPatterns(enrichedCandles);
     const signaledCandles = generateSignals(patternedCandles, { newsSentimentScore: newsData.sentimentScore });
@@ -178,6 +190,12 @@ app.get('/api/stock/:symbol/backtest', async (req, res) => {
 
   try {
     const rawCandles = await fetchStockData(symbol, interval, Number(years));
+    if (!rawCandles || rawCandles.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `Insufficient historical data to backtest symbol ${symbol.toUpperCase()}.`
+      });
+    }
     const enrichedCandles = enrichWithIndicators(rawCandles);
     const patternedCandles = detectPatterns(enrichedCandles);
     const signaledCandles = generateSignals(patternedCandles);

@@ -17,9 +17,10 @@ export async function fetchGlobalIndicators() {
 
   try {
     const quotes = await yahooFinance.quote(symbols);
+    const quotesList = Array.isArray(quotes) ? quotes : (quotes ? [quotes] : []);
     
     return symbols.map(symbol => {
-      const q = quotes.find(item => item.symbol === symbol) || {};
+      const q = quotesList.find(item => item.symbol === symbol) || {};
       return {
         symbol,
         name: nameMapping[symbol] || symbol,

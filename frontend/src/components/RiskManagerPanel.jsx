@@ -346,7 +346,7 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
       });
 
       // Individual undiversified VaR
-      const individualVaRs = stats.map(s => {
+      const individualVaRs = stats.map((s, idx) => {
         let varPercent;
         if (varMethod === 'HISTORICAL') {
           const sortedS = [...s.returns].sort((a, b) => a - b);
@@ -355,7 +355,8 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
         } else {
           varPercent = 1.65 * s.dailyVol * 100;
         }
-        const varValue = (capital * (s.weight / 100) * varPercent) / 100;
+        const w_i = normalizedWeights[idx];
+        const varValue = (capital * w_i * varPercent) / 100;
         return { symbol: s.symbol, value: varValue, percent: varPercent };
       });
 
