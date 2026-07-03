@@ -5,8 +5,10 @@ import { yahooFinance } from './dataService.js';
  * @returns {Promise<Array<Object>>} - Array of global indicators with current price and changes.
  */
 export async function fetchGlobalIndicators() {
-  const symbols = ['^GSPC', '^IXIC', 'CL=F', 'USDINR=X', 'GC=F', '^TNX'];
+  const symbols = ['^NSEI', '^BSESN', '^GSPC', '^IXIC', 'CL=F', 'USDINR=X', 'GC=F', '^TNX'];
   const nameMapping = {
+    '^NSEI': 'Nifty 50',
+    '^BSESN': 'BSE Sensex',
     '^GSPC': 'S&P 500',
     '^IXIC': 'NASDAQ Composite',
     'CL=F': 'Crude Oil Futures',
@@ -56,6 +58,8 @@ export function calculatePredictiveTrend(stockSymbol, localIntel, globalMacro) {
     symbolMap[asset.symbol] = asset;
   });
 
+  const nifty = symbolMap['^NSEI'] || { price: 0, changePercent: 0 };
+  const sensex = symbolMap['^BSESN'] || { price: 0, changePercent: 0 };
   const sp500 = symbolMap['^GSPC'] || { price: 0, changePercent: 0 };
   const nasdaq = symbolMap['^IXIC'] || { price: 0, changePercent: 0 };
   const crude = symbolMap['CL=F'] || { price: 0, changePercent: 0 };
@@ -65,6 +69,8 @@ export function calculatePredictiveTrend(stockSymbol, localIntel, globalMacro) {
 
   // 1. Calculate weighted scores from -100 to 100 for each asset
   // Volatility scaling: We scale the percentage changes to map typical daily moves to -100..100
+  const scoreNifty = Math.max(-100, Math.min(100, (nifty.changePercent || 0) * 80)); // Typical move: 1.25%
+  const scoreSensex = Math.max(-100, Math.min(100, (sensex.changePercent || 0) * 80));
   const scoreSP500 = Math.max(-100, Math.min(100, (sp500.changePercent || 0) * 60)); // Typical move: 1.5%
   const scoreNasdaq = Math.max(-100, Math.min(100, (nasdaq.changePercent || 0) * 50)); // Typical move: 2.0%
   const scoreCrude = Math.max(-100, Math.min(100, -(crude.changePercent || 0) * 30)); // High oil is BEARISH (inverse correlation)
@@ -73,13 +79,15 @@ export function calculatePredictiveTrend(stockSymbol, localIntel, globalMacro) {
   const scoreYields = Math.max(-100, Math.min(100, -(us10y.changePercent || 0) * 30)); // High yields are BEARISH (inverse correlation)
 
   // 2. Global Macro Sentiment Score as a weighted average
-  // Weights: S&P 500 (25%), Nasdaq (20%), Crude Oil (15%), USD/INR (20%), Gold (10%), US 10Y Yield (10%)
+  // Weights: Nifty 50 (20%), BSE Sensex (10%), S&P 500 (15%), Nasdaq (15%), Crude Oil (15%), USD/INR (10%), Gold (5%), US 10Y Yield (10%)
   const macroScore = Math.round(
-    (scoreSP500 * 0.25) +
-    (scoreNasdaq * 0.20) +
+    (scoreNifty * 0.20) +
+    (scoreSensex * 0.10) +
+    (scoreSP500 * 0.15) +
+    (scoreNasdaq * 0.15) +
     (scoreCrude * 0.15) +
-    (scoreUsdInr * 0.20) +
-    (scoreGold * 0.10) +
+    (scoreUsdInr * 0.10) +
+    (scoreGold * 0.05) +
     (scoreYields * 0.10)
   );
 
@@ -144,6 +152,10 @@ export function calculatePredictiveTrend(stockSymbol, localIntel, globalMacro) {
 
   let reasoning = `${cleanSymbol} exhibits a ${localStrength} technical structure locally, with a Local Quality Score of ${localScore}/100. `;
 
+  if (nifty.changePercent < -0.5 || sensex.changePercent < -0.5) {
+    reasoning += `This occurs amidst a systemic selloff in the Indian stock markets, with Nifty 50 declining by ${(nifty.changePercent || 0).toFixed(2)}% and BSE Sensex by ${(sensex.changePercent || 0).toFixed(2)}%. `;
+  }
+
   if (macroSentiment === 'BULLISH') {
     reasoning += `This momentum is reinforced by a ${macroSummary} global macroeconomic setup (Macro Score: +${macroScore}). `;
     reasoning += `Positive trading in the S&P 500 (${(sp500.changePercent || 0).toFixed(2)}%) and NASDAQ (${(nasdaq.changePercent || 0).toFixed(2)}%) suggests high global risk-on appetite, which typically increases Foreign Institutional Investor (FII) equity inflows into India. `;
@@ -152,19 +164,17 @@ export function calculatePredictiveTrend(stockSymbol, localIntel, globalMacro) {
     }
   } else if (macroSentiment === 'BEARISH') {
     reasoning += `However, global factors are introducing ${macroSummary} (Macro Score: ${macroScore}). `;
-    reasoning += `A downturn in the US indices (S&P 500: ${(sp500.changePercent || 0).toFixed(2)}%) indicates risk-off global sentiment. `;
     if (crude.changePercent > 0) {
-      reasoning += `This is compounded by rising crude oil prices (+${(crude.changePercent || 0).toFixed(2)}%), which increase domestic inflation and strain the current account. `;
+      reasoning += `Rising crude oil prices (+${(crude.changePercent || 0).toFixed(2)}%) increase domestic inflation and strain the current account. `;
     }
     if (usdinr.changePercent > 0) {
       reasoning += `Additionally, a depreciating Indian Rupee against the USD (+${(usdinr.changePercent || 0).toFixed(2)}%) increases the risk of FII capital flight from Emerging Markets. `;
     }
+    if (us10y.changePercent > 0) {
+      reasoning += `Valuations are also pressured by a rise in US 10-Year Treasury Yields (+${(us10y.changePercent || 0).toFixed(2)}% to ${(us10y.price || 0).toFixed(3)}%). `;
+    }
   } else {
     reasoning += `Meanwhile, global indices and currencies are stable and trading in a tight band, meaning domestic triggers and local indicators will primary dictate price actions. `;
-  }
-
-  if (us10y.changePercent > 0.8) {
-    reasoning += `The sharp increase in the US 10-Year Bond Yield (+${(us10y.changePercent || 0).toFixed(2)}% to ${(us10y.price || 0).toFixed(3)}%) serves as a macro warning, creating valuation pressures on high-growth companies. `;
   }
 
   reasoning += `Considering these factors, our predictive model projects a ${projectedTrend.toLowerCase()} with a confidence level of ${confidence}%.`;

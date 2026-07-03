@@ -12,6 +12,8 @@ describe('Global Macro Sentiment and Predictive Next Trend Engine', () => {
 
     // S&P 500 up +1.2%, Nasdaq up +1.5%, Oil down -1.5%, USD/INR down -0.25%, Gold down -0.5%, Yields down -0.8%
     const mockGlobalMacro = [
+      { symbol: '^NSEI', name: 'Nifty 50', price: 22000, change: 264, changePercent: 1.2 },
+      { symbol: '^BSESN', name: 'BSE Sensex', price: 72000, change: 864, changePercent: 1.2 },
       { symbol: '^GSPC', name: 'S&P 500', price: 5100, change: 60, changePercent: 1.2 },
       { symbol: '^IXIC', name: 'NASDAQ Composite', price: 16200, change: 240, changePercent: 1.5 },
       { symbol: 'CL=F', name: 'Crude Oil Futures', price: 78.5, change: -1.2, changePercent: -1.5 },
@@ -40,6 +42,8 @@ describe('Global Macro Sentiment and Predictive Next Trend Engine', () => {
 
     // S&P 500 down -1.2%, Nasdaq down -1.5%, Oil up +2.0%, USD/INR up +0.40%, Gold up +1.0%, Yields up +1.5%
     const mockGlobalMacro = [
+      { symbol: '^NSEI', name: 'Nifty 50', price: 21500, change: -322, changePercent: -1.5 },
+      { symbol: '^BSESN', name: 'BSE Sensex', price: 70500, change: -1057, changePercent: -1.5 },
       { symbol: '^GSPC', name: 'S&P 500', price: 4900, change: -60, changePercent: -1.2 },
       { symbol: '^IXIC', name: 'NASDAQ Composite', price: 15500, change: -240, changePercent: -1.5 },
       { symbol: 'CL=F', name: 'Crude Oil Futures', price: 82.5, change: 1.6, changePercent: 2.0 },
@@ -67,6 +71,8 @@ describe('Global Macro Sentiment and Predictive Next Trend Engine', () => {
 
     // Bearish macro setup
     const mockGlobalMacro = [
+      { symbol: '^NSEI', name: 'Nifty 50', price: 21500, change: -322, changePercent: -1.5 },
+      { symbol: '^BSESN', name: 'BSE Sensex', price: 70500, change: -1057, changePercent: -1.5 },
       { symbol: '^GSPC', name: 'S&P 500', price: 4900, change: -60, changePercent: -1.2 },
       { symbol: '^IXIC', name: 'NASDAQ Composite', price: 15500, change: -240, changePercent: -1.5 },
       { symbol: 'CL=F', name: 'Crude Oil Futures', price: 82.5, change: 1.6, changePercent: 2.0 },
@@ -92,6 +98,8 @@ describe('Global Macro Sentiment and Predictive Next Trend Engine', () => {
 
     // Stable flat macro
     const mockGlobalMacro = [
+      { symbol: '^NSEI', name: 'Nifty 50', price: 22000, change: 0, changePercent: 0 },
+      { symbol: '^BSESN', name: 'BSE Sensex', price: 72000, change: 0, changePercent: 0 },
       { symbol: '^GSPC', name: 'S&P 500', price: 5000, change: 0, changePercent: 0 },
       { symbol: '^IXIC', name: 'NASDAQ Composite', price: 16000, change: 0, changePercent: 0 },
       { symbol: 'CL=F', name: 'Crude Oil Futures', price: 80, change: 0, changePercent: 0 },
