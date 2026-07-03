@@ -38,13 +38,15 @@ export default function StockSelector({ selectedSymbol, onSelectSymbol }) {
         });
 
         const results = await Promise.all(fetchPromises);
-        const newQuotes = { ...quotes };
-        results.forEach(res => {
-          if (res) {
-            newQuotes[res.symbol] = res.quote;
-          }
+        setQuotes(prevQuotes => {
+          const newQuotes = { ...prevQuotes };
+          results.forEach(res => {
+            if (res) {
+              newQuotes[res.symbol] = res.quote;
+            }
+          });
+          return newQuotes;
         });
-        setQuotes(newQuotes);
       } catch (err) {
         console.error('Error in fetchAllQuotes:', err);
       }

@@ -53,9 +53,11 @@ export default function App() {
         setCandles(data.candles);
       } else {
         setError(data.error || 'Failed to fetch stock history.');
+        setCandles([]);
       }
     } catch (e) {
       setError('Connection to backend server failed. Make sure the backend server is running.');
+      setCandles([]);
     } finally {
       setLoading(false);
     }
@@ -69,9 +71,12 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         setIntelligenceData(data);
+      } else {
+        setIntelligenceData(null);
       }
     } catch (e) {
       console.error('Error fetching intelligence report:', e);
+      setIntelligenceData(null);
     } finally {
       setIntelligenceLoading(false);
     }
@@ -85,9 +90,12 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         setMultiTimeframeData(data);
+      } else {
+        setMultiTimeframeData(null);
       }
     } catch (e) {
       console.error('Error fetching multi timeframe matrix:', e);
+      setMultiTimeframeData(null);
     } finally {
       setMultiTimeframeLoading(false);
     }
@@ -103,9 +111,12 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         setBacktestData(data);
+      } else {
+        setBacktestData(null);
       }
     } catch (e) {
       console.error('Error fetching backtest results:', e);
+      setBacktestData(null);
     } finally {
       setBacktestLoading(false);
     }

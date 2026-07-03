@@ -125,7 +125,7 @@ export default function BacktestResults({ backtestData }) {
                     };
 
                     return (
-                      <tr key={idx}>
+                      <tr key={`${trade.entryTime}-${trade.exitTime}-${idx}`}>
                         <td>{formatDate(trade.entryTime)}</td>
                         <td>₹{trade.entryPrice.toFixed(2)}</td>
                         <td>{formatDate(trade.exitTime)}</td>
