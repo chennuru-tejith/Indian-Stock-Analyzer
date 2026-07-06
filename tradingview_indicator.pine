@@ -57,13 +57,13 @@ atr = ta.atr(atr_len)
 // ==========================================
 // 3. CANDLESTICK PATTERN DETECTION
 // ==========================================
-body = Math.abs(close - open)
+body = math.abs(close - open)
 range_c = high - low
 is_bullish = close >= open
 is_bearish = close < open
 
-body_top = Math.max(open, close)
-body_bottom = Math.min(open, close)
+body_top = math.max(open, close)
+body_bottom = math.min(open, close)
 
 upper_shadow = high - body_top
 lower_shadow = body_bottom - low
@@ -82,8 +82,8 @@ is_bullish_engulfing = is_bearish[1] and is_bullish and open <= close[1] and clo
 is_bearish_engulfing = is_bullish[1] and is_bearish and open >= close[1] and close <= open[1] and body > body[1]
 
 // Tweezer Patterns (0.05% tolerance)
-is_tweezer_bottom = is_bearish[1] and is_bullish and Math.abs(low - low[1]) / low <= 0.0005
-is_tweezer_top = is_bullish[1] and is_bearish and Math.abs(high - high[1]) / high <= 0.0005
+is_tweezer_bottom = is_bearish[1] and is_bullish and math.abs(low - low[1]) / low <= 0.0005
+is_tweezer_top = is_bullish[1] and is_bearish and math.abs(high - high[1]) / high <= 0.0005
 
 // Spinning Top (Indecision)
 is_spinning_top = body >= range_c * 0.05 and body <= range_c * 0.25 and upper_shadow >= body * 1.2 and lower_shadow >= body * 1.2 and range_c > avg_range * 0.3
@@ -110,7 +110,7 @@ if (rsi_val <= rsi_oversold)
 else if (rsi_val >= rsi_overbought)
     oscillator_score := 0
 else
-    oscillator_score := Math.round(100 - ((rsi_val - rsi_oversold) * (100 / (rsi_overbought - rsi_oversold))))
+    oscillator_score := math.round(100 - ((rsi_val - rsi_oversold) * (100 / (rsi_overbought - rsi_oversold))))
 
 // Pattern Pillar
 pattern_score = 50
@@ -124,7 +124,7 @@ if (is_inverted_hammer_shape and rsi_val >= 60)
     pattern_score := pattern_score - 25
 
 // Fused Scalping & Swing Trading Score
-fused_score = Math.round((trend_score + oscillator_score + pattern_score) / 3)
+fused_score = math.round((trend_score + oscillator_score + pattern_score) / 3)
 
 buy_signal = fused_score >= 65 and vol_expanded
 sell_signal = fused_score <= 35 and vol_expanded
@@ -134,7 +134,7 @@ sell_signal = fused_score <= 35 and vol_expanded
 // ==========================================
 // Standard deviation projection boundary using ATR
 // Expected range = 1.65 * ATR * sqrt(t) -> 90% confidence
-atr_vol_factor = 1.65 * atr * Math.sqrt(projection_len)
+atr_vol_factor = 1.65 * atr * math.sqrt(projection_len)
 
 // Shift forecast targets based on score momentum
 expected_return_pct = 0.0
