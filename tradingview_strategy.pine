@@ -8,14 +8,14 @@ gp_mode      = "SYSTEM OPERATING MODE"
 sys_mode     = input.string("BALANCED", title="Operating Mode", options=["CONSERVATIVE", "BALANCED", "AGGRESSIVE"], group=gp_mode)
 min_rr       = input.float(1.5, title="Minimum Reward-to-Risk Ratio", step=0.1, group=gp_mode)
 
-gp_modules   = "MODULE ENABLE/DISABLE"
-enable_trend = input.bool(true, title="Enable Trend Quality Module", group=gp_modules)
-enable_momen = input.bool(true, title="Enable Momentum Quality Module", group=gp_modules)
-enable_volum = input.bool(true, title="Enable Volume & Participation Module", group=gp_modules)
-enable_struct= input.bool(true, title="Enable Market Structure Module", group=gp_modules)
-enable_locat = input.bool(true, title="Enable Fair Value Location Module", group=gp_modules)
-enable_volat = input.bool(true, title="Enable Volatility & Squeeze Module", group=gp_modules)
-enable_mtf   = input.bool(true, title="Enable Higher Timeframe Module", group=gp_modules)
+gp_modules   = "MODULE TOGGLES"
+enable_trend = input.bool(true, title="Enable Trend Engine", group=gp_modules)
+enable_momen = input.bool(true, title="Enable Momentum Engine", group=gp_modules)
+enable_volum = input.bool(true, title="Enable Volume Engine", group=gp_modules)
+enable_struct= input.bool(true, title="Enable Structure Engine", group=gp_modules)
+enable_smc   = input.bool(true, title="Enable Smart Money Concepts", group=gp_modules)
+enable_volat = input.bool(true, title="Enable Volatility Engine", group=gp_modules)
+enable_mtf   = input.bool(true, title="Enable Multi-Timeframe Alignment", group=gp_modules)
 
 gp_trend     = "A. TREND QUALITY SETTINGS"
 ema_fast_len = input.int(20, title="Fast EMA Length", minval=5, group=gp_trend)
@@ -38,21 +38,24 @@ vol_spike_m  = input.float(1.5, title="Volume Spike Threshold Multiplier", step=
 gp_structure = "D. MARKET STRUCTURE"
 pivot_len    = input.int(5, title="Pivot Point Lookback", minval=2, group=gp_structure)
 
-gp_location  = "E. FAIR VALUE LOCATION"
+gp_smc       = "E. SMART MONEY CONCEPTS"
+fvg_threshold= input.float(0.1, title="FVG Min Height (ATR Ratio)", step=0.05, group=gp_smc)
+
+gp_location  = "F. FAIR VALUE LOCATION"
 vwap_dev_mult= input.float(2.0, title="VWAP Standard Dev Multiplier", step=0.5, group=gp_location)
 
-gp_volatility= "F. VOLATILITY ENGINE"
+gp_volatility= "G. VOLATILITY ENGINE"
 atr_len      = input.int(14, title="ATR Length", group=gp_volatility)
 atr_stop_m   = input.float(2.0, title="ATR Stop Loss Multiplier", step=0.1, group=gp_volatility)
 
-gp_mtf       = "G. MULTI-TIMEFRAME ALIGNMENT"
+gp_mtf       = "H. MULTI-TIMEFRAME ALIGNMENT"
 htf_res      = input.timeframe("240", title="Higher Timeframe", group=gp_mtf)
 
-gp_session   = "H. SESSION & FILTER RULES"
+gp_session   = "I. SESSION & FILTER RULES"
 use_session  = input.bool(false, title="Restrict Trading to Session", group=gp_session)
 session_time = input.session("0915-1530:23456", title="Active Trading Session (IST Default)", group=gp_session)
 
-gp_dates     = "I. BACKTEST DATE RANGE"
+gp_dates     = "J. BACKTEST DATE RANGE"
 start_year   = input.int(2020, title="Start Year", group=gp_dates)
 start_month  = input.int(1, title="Start Month", group=gp_dates)
 start_day    = input.int(1, title="Start Day", group=gp_dates)
@@ -103,7 +106,6 @@ vwap_val = vwap_sum / (vol_sum > 0 ? vol_sum : 1)
 // =========================================================================
 // 4. REGIME CLASSIFICATION ENGINE
 // =========================================================================
-// Calculate Price Efficiency
 eff_num = math.abs(close - close[10])
 eff_denom = 0.0
 for i = 0 to 9
@@ -124,7 +126,7 @@ else
     regime_type := 0
 
 // =========================================================================
-// 5. MARKET STRUCTURE ENGINE (NON-REPAINTING)
+// 5. MARKET STRUCTURE & SMC ENGINE (NON-REPAINTING)
 // =========================================================================
 var float last_high = na
 var float last_low = na
@@ -137,6 +139,10 @@ if (not na(pl))
 bullish_bos = ta.crossover(close, last_high) and is_vol_spike
 bearish_bos = ta.crossunder(close, last_low) and is_vol_spike
 
+// Fair Value Gaps (FVG)
+bool bullish_fvg = low[0] > high[2] and (low[0] - high[2]) > (fvg_threshold * atr)
+bool bearish_fvg = high[0] < low[2] and (low[2] - high[0]) > (fvg_threshold * atr)
+
 // =========================================================================
 // 6. MULTI-TIMEFRAME ENGINE (NO LOOKAHEAD SECURITY)
 // =========================================================================
@@ -147,46 +153,30 @@ htf_trend_bullish = htf_ema_fast > htf_sma_slow
 // =========================================================================
 // 7. COMPOSITE SCORING MODEL
 // =========================================================================
-float w_trend = 0.20
-float w_momen = 0.15
-float w_volum = 0.15
+float w_trend  = 0.20
+float w_momen  = 0.15
+float w_volum  = 0.15
 float w_struct = 0.20
-float w_locat = 0.10
-float w_volat = 0.10
-float w_mtf = 0.10
+float w_smc    = 0.15
+float w_volat  = 0.10
+float w_mtf    = 0.05
 
 if (regime_type == 1) // Trending
     w_trend  := 0.30
     w_struct := 0.20
-    w_mtf    := 0.15
+    w_mtf    := 0.10
     w_momen  := 0.10
     w_volum  := 0.10
-    w_locat  := 0.10
+    w_smc    := 0.15
     w_volat  := 0.05
 else if (regime_type == 0) // Ranging
-    w_locat  := 0.30
     w_momen  := 0.25
+    w_smc    := 0.20
     w_trend  := 0.05
     w_struct := 0.10
-    w_volat  := 0.10
-    w_volum  := 0.10
-    w_mtf    := 0.10
-else if (regime_type == 2) // Squeeze
-    w_volum  := 0.25
-    w_struct := 0.20
     w_volat  := 0.15
-    w_trend  := 0.15
-    w_momen  := 0.10
-    w_locat  := 0.05
-    w_mtf    := 0.10
-else if (regime_type == 3) // Volatile
-    w_volat  := 0.20
-    w_mtf    := 0.20
-    w_struct := 0.20
-    w_trend  := 0.10
-    w_momen  := 0.10
     w_volum  := 0.10
-    w_locat  := 0.10
+    w_mtf    := 0.15
 
 // Factors Scoring
 float t_score = 0.0
@@ -207,7 +197,7 @@ if (hist_deriv < 0) m_score := m_score - 40
 
 float v_score = is_vol_spike ? (close >= open ? 100.0 : -100.0) : (close >= open ? 40.0 : -40.0)
 float s_score = bullish_bos ? 100.0 : bearish_bos ? -100.0 : 0.0
-float l_score = close > vwap_val ? 50.0 : -50.0
+float smc_score = bullish_fvg ? 100.0 : bearish_fvg ? -100.0 : 0.0
 float volatility_score = is_squeezed ? 50.0 : 0.0
 float mtf_score_val = htf_trend_bullish ? 100.0 : -100.0
 
@@ -226,9 +216,9 @@ if (enable_volum)
 if (enable_struct)
     final_bullish_factor := final_bullish_factor + (math.max(0.0, s_score) * w_struct)
     final_bearish_factor := final_bearish_factor + (math.max(0.0, -s_score) * w_struct)
-if (enable_locat)
-    final_bullish_factor := final_bullish_factor + (math.max(0.0, l_score) * w_locat)
-    final_bearish_factor := final_bearish_factor + (math.max(0.0, -l_score) * w_locat)
+if (enable_smc)
+    final_bullish_factor := final_bullish_factor + (math.max(0.0, smc_score) * w_smc)
+    final_bearish_factor := final_bearish_factor + (math.max(0.0, -smc_score) * w_smc)
 if (enable_volat)
     final_bullish_factor := final_bullish_factor + (math.max(0.0, volatility_score) * w_volat)
     final_bearish_factor := final_bearish_factor + (math.max(0.0, -volatility_score) * w_volat)

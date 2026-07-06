@@ -1,29 +1,30 @@
 //@version=6
-indicator("Aladdin Institutional Multi-Factor Market Intelligence Engine", shorttitle="Aladdin Intelligence", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+indicator("Aladdin Institutional AI Multi-Factor Market Intelligence Indicator", shorttitle="Aladdin AI Multi-Factor", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
 // =========================================================================
-// 1. INPUT PARAMETERS (USER CONTROLS)
+// 1. INPUT PARAMETERS (USER CONFIGURATIONS)
 // =========================================================================
-gp_mode      = "SYSTEM OPERATING MODE"
-sys_mode     = input.string("BALANCED", title="Operating Mode", options=["CONSERVATIVE", "BALANCED", "AGGRESSIVE"], group=gp_mode)
-min_rr       = input.float(1.5, title="Minimum Reward-to-Risk Ratio", step=0.1, group=gp_mode)
+gp_sys       = "SYSTEM CONFIGURATION"
+sys_mode     = input.string("BALANCED", title="Operating Mode", options=["CONSERVATIVE", "BALANCED", "AGGRESSIVE"], group=gp_sys)
+min_rr       = input.float(1.5, title="Minimum Reward-to-Risk Ratio", step=0.1, group=gp_sys)
 
-gp_modules   = "MODULE ENABLE/DISABLE"
-enable_trend = input.bool(true, title="Enable Trend Quality Module", group=gp_modules)
-enable_momen = input.bool(true, title="Enable Momentum Quality Module", group=gp_modules)
-enable_volum = input.bool(true, title="Enable Volume & Participation Module", group=gp_modules)
-enable_struct= input.bool(true, title="Enable Market Structure Module", group=gp_modules)
-enable_locat = input.bool(true, title="Enable Fair Value Location Module", group=gp_modules)
-enable_volat = input.bool(true, title="Enable Volatility & Squeeze Module", group=gp_modules)
-enable_mtf   = input.bool(true, title="Enable Higher Timeframe Module", group=gp_modules)
+gp_modules   = "MODULE TOGGLES"
+enable_trend = input.bool(true, title="Enable Trend Engine", group=gp_modules)
+enable_momen = input.bool(true, title="Enable Momentum Engine", group=gp_modules)
+enable_volum = input.bool(true, title="Enable Volume Engine", group=gp_modules)
+enable_struct= input.bool(true, title="Enable Structure Engine", group=gp_modules)
+enable_smc   = input.bool(true, title="Enable Smart Money Concepts", group=gp_modules)
+enable_volat = input.bool(true, title="Enable Volatility Engine", group=gp_modules)
+enable_mtf   = input.bool(true, title="Enable Multi-Timeframe Alignment", group=gp_modules)
+enable_pat   = input.bool(true, title="Enable Pattern Recognition", group=gp_modules)
 
-gp_trend     = "A. TREND QUALITY SETTINGS"
-ema_fast_len = input.int(20, title="Fast EMA Length", minval=5, group=gp_trend)
-sma_slow_len = input.int(200, title="Slow SMA Length", minval=50, group=gp_trend)
-adx_len      = input.int(14, title="ADX Smoothing Period", group=gp_trend)
-adx_limit    = input.int(20, title="Trend Strength Threshold", group=gp_trend)
+gp_trend     = "A. TREND QUALITY"
+ema_fast_len = input.int(20, title="Fast EMA Period", group=gp_trend)
+sma_slow_len = input.int(200, title="Slow SMA Period", group=gp_trend)
+adx_len      = input.int(14, title="ADX Period", group=gp_trend)
+adx_limit    = input.int(20, title="ADX Threshold", group=gp_trend)
 
-gp_momentum  = "B. MOMENTUM QUALITY SETTINGS"
+gp_momentum  = "B. MOMENTUM QUALITY"
 rsi_len      = input.int(14, title="RSI Length", group=gp_momentum)
 rsi_ob       = input.int(70, title="RSI Overbought", group=gp_momentum)
 rsi_os       = input.int(30, title="RSI Oversold", group=gp_momentum)
@@ -33,26 +34,30 @@ macd_signal  = input.int(9, title="MACD Signal Period", group=gp_momentum)
 
 gp_volume    = "C. VOLUME & PARTICIPATION"
 vol_ma_len   = input.int(20, title="Volume SMA Period", group=gp_volume)
-vol_spike_m  = input.float(1.5, title="Volume Spike Threshold Multiplier", step=0.1, group=gp_volume)
+vol_spike_m  = input.float(1.5, title="Volume Spike Multiplier", step=0.1, group=gp_volume)
 
 gp_structure = "D. MARKET STRUCTURE"
-pivot_len    = input.int(5, title="Pivot Point Lookback", minval=2, group=gp_structure)
+pivot_len    = input.int(5, title="Swing Pivot Lookback", minval=2, group=gp_structure)
 
-gp_location  = "E. FAIR VALUE LOCATION"
-vwap_dev_mult= input.float(2.0, title="VWAP Standard Dev Multiplier", step=0.5, group=gp_location)
+gp_smc       = "E. SMART MONEY CONCEPTS"
+fvg_threshold= input.float(0.1, title="FVG Min Height (ATR Ratio)", step=0.05, group=gp_smc)
+show_ob      = input.bool(true, title="Show Order Blocks", group=gp_smc)
 
-gp_volatility= "F. VOLATILITY ENGINE"
+gp_location  = "F. FAIR VALUE LOCATION"
+vwap_dev_mult= input.float(2.0, title="VWAP Deviation Band Multiplier", step=0.5, group=gp_location)
+
+gp_volatility= "G. VOLATILITY ENGINE"
 atr_len      = input.int(14, title="ATR Length", group=gp_volatility)
 atr_stop_m   = input.float(2.0, title="ATR Stop Loss Multiplier", step=0.1, group=gp_volatility)
 
-gp_mtf       = "G. MULTI-TIMEFRAME ALIGNMENT"
+gp_mtf       = "H. MULTI-TIMEFRAME ALIGNMENT"
 htf_res      = input.timeframe("240", title="Higher Timeframe", group=gp_mtf)
 
-gp_session   = "H. SESSION & FILTER RULES"
-use_session  = input.bool(false, title="Restrict Trading to Session", group=gp_session)
-session_time = input.session("0915-1530:23456", title="Active Trading Session (IST Default)", group=gp_session)
+gp_session   = "I. SESSION RULES"
+use_session  = input.bool(false, title="Restrict Trading Session", group=gp_session)
+session_time = input.session("0915-1530:23456", title="Trading Session Times", group=gp_session)
 
-gp_ui        = "I. DASHBOARD DISPLAY"
+gp_ui        = "J. TELEMETRY DISPLAY"
 show_dash    = input.bool(true, title="Show Telemetry Dashboard", group=gp_ui)
 dash_pos     = input.string("top_right", title="Dashboard Position", options=["top_right", "bottom_right", "top_left", "bottom_left"], group=gp_ui)
 
@@ -71,25 +76,18 @@ cell_format(table t, int col, int row, string txt, color text_c, color bg_c) =>
     table.cell(t, col, row, txt, text_color=text_c, bgcolor=bg_c, text_size=size.small, text_align=text.align_left)
 
 // =========================================================================
-// 3. SESSION FILTER
+// 3. CORE TECHNICAL INDICATORS
 // =========================================================================
-in_session = not use_session or not na(time(timeframe.period, session_time))
-
-// =========================================================================
-// 4. CORE TECHNICAL INDICATORS (CURRENT TIMEFRAME)
-// =========================================================================
-// Moving Averages
 ema_fast = ta.ema(close, ema_fast_len)
 sma_slow = ta.sma(close, sma_slow_len)
-
-// EMA Normalized Slope
 slope_fast = (ema_fast - ema_fast[5]) / (ta.atr(atr_len) * 5) * 100
 
 // ADX & DMI
 [di_plus, di_minus, adx_val] = ta.dmi(adx_len, adx_len)
 
-// RSI
+// RSI & Stochastic RSI
 rsi_val = ta.rsi(close, rsi_len)
+stoch_rsi_val = ta.sma(ta.stoch(rsi_val, rsi_val, rsi_val, rsi_len), 3)
 
 // MACD
 [macd_line, macd_sig, macd_hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
@@ -100,23 +98,17 @@ vol_sma = ta.sma(volume, vol_ma_len)
 rvol = volume / (vol_sma > 0 ? vol_sma : 1)
 is_vol_spike = rvol >= vol_spike_m
 
-// ATR Volatility
+// Volatility & Bands
 atr = ta.atr(atr_len)
 atr_pct = (atr / close) * 100
-
-// Bollinger Bands & Squeeze
 bb_basis = ta.sma(close, 20)
 bb_dev = ta.stdev(close, 20)
 bb_upper = bb_basis + (2 * bb_dev)
 bb_lower = bb_basis - (2 * bb_dev)
-bb_width = (bb_upper - bb_lower) / bb_basis
+is_squeezed = bb_upper - bb_lower < 1.5 * ta.atr(20)
 
-// Bollinger Squeeze based on Keltner Channels
-kc_basis = ta.sma(close, 20)
-kc_range = ta.atr(20)
-kc_upper = kc_basis + (1.5 * kc_range)
-kc_lower = kc_basis - (1.5 * kc_range)
-is_squeezed = (bb_upper < kc_upper) and (bb_lower > kc_lower)
+// Session check
+in_session = not use_session or not na(time(timeframe.period, session_time))
 
 // Dynamic VWAP Bands
 var float vwap_sum = na
@@ -124,25 +116,19 @@ var float vol_sum = na
 if (ta.change(time("D")))
     vwap_sum := 0.0
     vol_sum := 0.0
-
 vwap_sum := nz(vwap_sum) + (close * volume)
 vol_sum := nz(vol_sum) + volume
 vwap_val = vwap_sum / (vol_sum > 0 ? vol_sum : 1)
-vwap_stdev = ta.stdev(close, 20)
-vwap_upper = vwap_val + (vwap_dev_mult * vwap_stdev)
-vwap_lower = vwap_val - (vwap_dev_mult * vwap_stdev)
 
 // =========================================================================
-// 5. REGIME CLASSIFICATION ENGINE
+// 4. REGIME DETECTOR
 // =========================================================================
-// Calculate Price Efficiency (Fractal Efficiency Ratio) over 10 periods
 eff_num = math.abs(close - close[10])
 eff_denom = 0.0
 for i = 0 to 9
     eff_denom := eff_denom + math.abs(close[i] - close[i+1])
 price_efficiency = eff_denom > 0 ? eff_num / eff_denom : 1.0
 
-// Identify local regime
 string regime = "Sideways / Range"
 int regime_type = 0 // 0 = Sideways, 1 = Trending, 2 = Breakout, 3 = Volatile
 
@@ -170,7 +156,7 @@ else
     regime_type := 0
 
 // =========================================================================
-// 6. MARKET STRUCTURE ENGINE (NON-REPAINTING)
+// 5. PRICE STRUCTURE ENGINE (swing pivots, BOS, CHoCH)
 // =========================================================================
 var float last_high = na
 var float last_low = na
@@ -187,76 +173,88 @@ if (not na(pl))
     prev_low := last_low
     last_low := pl
 
-// Swing High/Low Structure Type
 string structure_type = "Neutral"
 if (not na(last_high) and not na(prev_high))
-    if (last_high > prev_high)
-        structure_type := "HH"
-    else
-        structure_type := "LH"
+    structure_type := last_high > prev_high ? "HH" : "LH"
 if (not na(last_low) and not na(prev_low))
-    if (last_low > prev_low)
-        structure_type := structure_type + "/HL"
-    else
-        structure_type := structure_type + "/LL"
+    structure_type := structure_type + (last_low > prev_low ? "/HL" : "/LL")
 
-// BOS & CHoCH Calculations
 bool bullish_bos = ta.crossover(close, last_high) and is_vol_spike
 bool bearish_bos = ta.crossunder(close, last_low) and is_vol_spike
 
 // =========================================================================
-// 7. MULTI-TIMEFRAME ENGINE (NO LOOKAHEAD SECURITY)
+// 6. SMART MONEY CONCEPTS (FVG & OB Detection)
+// =========================================================================
+// Fair Value Gaps (FVG)
+bool bullish_fvg = low[0] > high[2] and (low[0] - high[2]) > (fvg_threshold * atr)
+bool bearish_fvg = high[0] < low[2] and (low[2] - high[0]) > (fvg_threshold * atr)
+
+// Order Blocks (OB)
+var box bullish_ob_box = na
+var box bearish_ob_box = na
+
+if (bullish_bos and show_ob)
+    box.delete(bullish_ob_box)
+    bullish_ob_box := box.new(left=bar_index[5], top=high[5], right=bar_index, bottom=low[5], color=color.new(#10b981, 80), bgcolor=color.new(#10b981, 95))
+if (bearish_bos and show_ob)
+    box.delete(bearish_ob_box)
+    bearish_ob_box := box.new(left=bar_index[5], top=high[5], right=bar_index, bottom=low[5], color=color.new(#ef4444, 80), bgcolor=color.new(#ef4444, 95))
+
+// =========================================================================
+// 7. MULTI-TIMEFRAME ANALYSIS (No-Lookahead Security)
 // =========================================================================
 htf_ema_fast = request.security(syminfo.tickerid, htf_res, ta.ema(close, ema_fast_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
 htf_sma_slow = request.security(syminfo.tickerid, htf_res, ta.sma(close, sma_slow_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
 htf_trend_bullish = htf_ema_fast > htf_sma_slow
 
 // =========================================================================
-// 8. COMPOSITE MULTI-FACTOR SCORING MODEL
+// 8. PATTERN RECOGNITION (Candlestick Patterns)
 // =========================================================================
-// Define dynamic weighting matrix based on regime type
-float w_trend = 0.20
-float w_momen = 0.15
-float w_volum = 0.15
+body = math.abs(close - open)
+range_c = high - low
+is_bullish = close >= open
+is_bearish = close < open
+
+body_top = math.max(open, close)
+body_bottom = math.min(open, close)
+upper_shadow = high - body_top
+lower_shadow = body_bottom - low
+avg_range = ta.sma(range_c, 10)
+
+is_hammer_shape = lower_shadow >= body * 2 and upper_shadow <= range_c * 0.1 and range_c > avg_range * 0.4
+is_shooting_star = upper_shadow >= body * 2 and lower_shadow <= range_c * 0.1 and range_c > avg_range * 0.4
+is_bullish_engulfing = is_bearish[1] and is_bullish and open <= close[1] and close >= open[1] and body > body[1]
+is_bearish_engulfing = is_bullish[1] and is_bearish and open >= close[1] and close <= open[1] and body > body[1]
+
+// =========================================================================
+// 9. AI CONFLUENCE ENGINE (Weighted Scores)
+// =========================================================================
+float w_trend  = 0.20
+float w_momen  = 0.15
+float w_volum  = 0.15
 float w_struct = 0.20
-float w_locat = 0.10
-float w_volat = 0.10
-float w_mtf = 0.10
+float w_smc    = 0.15
+float w_volat  = 0.10
+float w_mtf    = 0.05
 
 if (regime_type == 1) // Trending
     w_trend  := 0.30
     w_struct := 0.20
-    w_mtf    := 0.15
+    w_mtf    := 0.10
     w_momen  := 0.10
     w_volum  := 0.10
-    w_locat  := 0.10
+    w_smc    := 0.15
     w_volat  := 0.05
 else if (regime_type == 0) // Ranging
-    w_locat  := 0.30
     w_momen  := 0.25
+    w_smc    := 0.20
     w_trend  := 0.05
     w_struct := 0.10
-    w_volat  := 0.10
-    w_volum  := 0.10
-    w_mtf    := 0.10
-else if (regime_type == 2) // Squeeze / Breakout
-    w_volum  := 0.25
-    w_struct := 0.20
     w_volat  := 0.15
-    w_trend  := 0.15
-    w_momen  := 0.10
-    w_locat  := 0.05
-    w_mtf    := 0.10
-else if (regime_type == 3) // Volatile
-    w_volat  := 0.20
-    w_mtf    := 0.20
-    w_struct := 0.20
-    w_trend  := 0.10
-    w_momen  := 0.10
     w_volum  := 0.10
-    w_locat  := 0.10
+    w_mtf    := 0.15
 
-// A. Trend Quality Score [-100, 100]
+// Scores [-100, 100]
 float t_score = 0.0
 if (close > ema_fast) t_score := t_score + 40
 if (close > sma_slow) t_score := t_score + 40
@@ -265,7 +263,6 @@ if (close < ema_fast) t_score := t_score - 40
 if (close < sma_slow) t_score := t_score - 40
 if (slope_fast < 0)   t_score := t_score - 20
 
-// B. Momentum Quality Score [-100, 100]
 float m_score = 0.0
 if (rsi_val > 50) m_score := m_score + 30
 if (macd_hist > 0) m_score := m_score + 30
@@ -274,86 +271,48 @@ if (rsi_val < 50) m_score := m_score - 30
 if (macd_hist < 0) m_score := m_score - 30
 if (hist_deriv < 0) m_score := m_score - 40
 
-// C. Volume Participation Score [-100, 100]
-float v_score = 0.0
-if (is_vol_spike)
-    v_score := close >= open ? 100.0 : -100.0
-else
-    v_score := close >= open ? 40.0 : -40.0
+float v_score = is_vol_spike ? (close >= open ? 100.0 : -100.0) : (close >= open ? 40.0 : -40.0)
+float s_score = bullish_bos ? 100.0 : bearish_bos ? -100.0 : 0.0
+float smc_score = bullish_fvg ? 100.0 : bearish_fvg ? -100.0 : 0.0
+float volatility_score = is_squeezed ? 50.0 : 0.0
+float mtf_score_val = htf_trend_bullish ? 100.0 : -100.0
 
-// D. Market Structure Score [-100, 100]
-float s_score = 0.0
-if (structure_type == "HH/HL" or structure_type == "LH/HL") s_score := s_score + 60
-if (structure_type == "LH/LL" or structure_type == "HH/LL") s_score := s_score - 60
-if (bullish_bos) s_score := s_score + 40
-if (bearish_bos) s_score := s_score - 40
-
-// E. Fair Value Location Score [-100, 100]
-float l_score = 0.0
-if (close > vwap_val) l_score := l_score + 50
-if (close > vwap_lower and close < vwap_upper) l_score := l_score + 50
-if (close < vwap_val) l_score := l_score - 50
-if (close > vwap_upper or close < vwap_lower) l_score := l_score - 50 // Overextension penalty
-
-// F. Volatility Squeeze Score [-100, 100]
-float volatility_score = 0.0
-if (is_squeezed) volatility_score := volatility_score + 50
-if (atr_pct < 2.0) volatility_score := volatility_score + 50
-if (atr_pct > 5.0) volatility_score := volatility_score - 50
-
-// G. Higher Timeframe Score [-100, 100]
-float mtf_score = htf_trend_bullish ? 100.0 : -100.0
-
-// Normalize and compile final directional confidence scores
-float final_bullish_factor = 0.0
-float final_bearish_factor = 0.0
+float final_bull = 0.0
+float final_bear = 0.0
 
 if (enable_trend)
-    final_bullish_factor := final_bullish_factor + (math.max(0.0, t_score) * w_trend)
-    final_bearish_factor := final_bearish_factor + (math.max(0.0, -t_score) * w_trend)
+    final_bull := final_bull + (math.max(0.0, t_score) * w_trend)
+    final_bear := final_bear + (math.max(0.0, -t_score) * w_trend)
 if (enable_momen)
-    final_bullish_factor := final_bullish_factor + (math.max(0.0, m_score) * w_momen)
-    final_bearish_factor := final_bearish_factor + (math.max(0.0, -m_score) * w_momen)
+    final_bull := final_bull + (math.max(0.0, m_score) * w_momen)
+    final_bear := final_bear + (math.max(0.0, -m_score) * w_momen)
 if (enable_volum)
-    final_bullish_factor := final_bullish_factor + (math.max(0.0, v_score) * w_volum)
-    final_bearish_factor := final_bearish_factor + (math.max(0.0, -v_score) * w_volum)
+    final_bull := final_bull + (math.max(0.0, v_score) * w_volum)
+    final_bear := final_bear + (math.max(0.0, -v_score) * w_volum)
 if (enable_struct)
-    final_bullish_factor := final_bullish_factor + (math.max(0.0, s_score) * w_struct)
-    final_bearish_factor := final_bearish_factor + (math.max(0.0, -s_score) * w_struct)
-if (enable_locat)
-    final_bullish_factor := final_bullish_factor + (math.max(0.0, l_score) * w_locat)
-    final_bearish_factor := final_bearish_factor + (math.max(0.0, -l_score) * w_locat)
+    final_bull := final_bull + (math.max(0.0, s_score) * w_struct)
+    final_bear := final_bear + (math.max(0.0, -s_score) * w_struct)
+if (enable_smc)
+    final_bull := final_bull + (math.max(0.0, smc_score) * w_smc)
+    final_bear := final_bear + (math.max(0.0, -smc_score) * w_smc)
 if (enable_volat)
-    final_bullish_factor := final_bullish_factor + (math.max(0.0, volatility_score) * w_volat)
-    final_bearish_factor := final_bearish_factor + (math.max(0.0, -volatility_score) * w_volat)
+    final_bull := final_bull + (math.max(0.0, volatility_score) * w_volat)
+    final_bear := final_bear + (math.max(0.0, -volatility_score) * w_volat)
 if (enable_mtf)
-    final_bullish_factor := final_bullish_factor + (math.max(0.0, mtf_score) * w_mtf)
-    final_bearish_factor := final_bearish_factor + (math.max(0.0, -mtf_score) * w_mtf)
+    final_bull := final_bull + (math.max(0.0, mtf_score_val) * w_mtf)
+    final_bear := final_bear + (math.max(0.0, -mtf_score_val) * w_mtf)
 
-int bullish_confidence = math.round(final_bullish_factor)
-int bearish_confidence = math.round(final_bearish_factor)
-int uncertainty = math.round(100 - (bullish_confidence + bearish_confidence))
-
-// Conflict Engine
-string conflict = "None"
-if (t_score > 50 and m_score < -50)
-    conflict := "Trend Bullish / Momentum Bearish"
-else if (t_score < -50 and m_score > 50)
-    conflict := "Trend Bearish / Momentum Bullish"
-else if (bullish_bos and rvol < 1.0)
-    conflict := "Bullish Breakout / Weak Volume"
+int bullish_confidence = math.round(final_bull)
+int bearish_confidence = math.round(final_bear)
 
 // =========================================================================
-// 9. HARD VETO GUARDS
+// 10. HARD VETO guards
 // =========================================================================
 bool veto_long = false
 bool veto_short = false
 string veto_reason = "None"
-
-// Mode Adjustment
 float overextension_limit = sys_mode == "CONSERVATIVE" ? 1.5 : sys_mode == "BALANCED" ? 2.25 : 3.0
 
-// Long Veto conditions
 if (not htf_trend_bullish and sys_mode == "CONSERVATIVE")
     veto_long := true
     veto_reason := "HTF Trend Opposition"
@@ -362,12 +321,11 @@ else if (close > vwap_val + (overextension_limit * atr))
     veto_reason := "Extreme Upside Overextension"
 else if (regime_type == 3)
     veto_long := true
-    veto_reason := "Chaotic Volatile Regime"
+    veto_reason := "Volatile Disorder"
 else if (not in_session)
     veto_long := true
     veto_reason := "Outside Session Limits"
 
-// Short Veto conditions
 if (htf_trend_bullish and sys_mode == "CONSERVATIVE")
     veto_short := true
     veto_reason := "HTF Trend Opposition"
@@ -376,22 +334,20 @@ else if (close < vwap_val - (overextension_limit * atr))
     veto_reason := "Extreme Downside Overextension"
 else if (regime_type == 3)
     veto_short := true
-    veto_reason := "Chaotic Volatile Regime"
+    veto_reason := "Volatile Disorder"
 else if (not in_session)
     veto_short := true
     veto_reason := "Outside Session Limits"
 
 // =========================================================================
-// 10. SIGNAL DEPLOYMENT & RISK ENGINE
+// 11. SIGNAL FILTER & RISK ENGINE
 // =========================================================================
-// Trigger Thresholds
 int buy_threshold = sys_mode == "CONSERVATIVE" ? 75 : sys_mode == "BALANCED" ? 65 : 55
 int sell_threshold = sys_mode == "CONSERVATIVE" ? 75 : sys_mode == "BALANCED" ? 65 : 55
 
 bool buy_trigger = bullish_confidence >= buy_threshold and not veto_long and barstate.isconfirmed
 bool sell_trigger = bearish_confidence >= sell_threshold and not veto_short and barstate.isconfirmed
 
-// Prevent double execution signals via cooldown lookback
 var int last_signal_bar = 0
 bool cooldown_ok = (bar_index - last_signal_bar) >= 5
 
@@ -401,9 +357,6 @@ bool exec_sell = sell_trigger and cooldown_ok
 if (exec_buy or exec_sell)
     last_signal_bar := bar_index
 
-// Entry, Stop and Target Ranges
-var float entry_low = na
-var float entry_high = na
 var float stop_loss = na
 var float target_1 = na
 var float target_2 = na
@@ -412,48 +365,36 @@ var string signal_state = "Neutral"
 
 if (exec_buy)
     signal_state := "STRONG BUY"
-    entry_low := close - (0.25 * atr)
-    entry_high := close + (0.25 * atr)
     stop_loss := math.min(close - (atr_stop_m * atr), nz(last_low, close * 0.95))
-    
-    // Risk Multiples
     float risk = close - stop_loss
     target_1 := close + (1.0 * risk)
     target_2 := close + (2.0 * risk)
     target_3 := close + (3.0 * risk)
-
 else if (exec_sell)
     signal_state := "STRONG SELL"
-    entry_low := close - (0.25 * atr)
-    entry_high := close + (0.25 * atr)
     stop_loss := math.max(close + (atr_stop_m * atr), nz(last_high, close * 1.05))
-    
-    // Risk Multiples
     float risk = stop_loss - close
     target_1 := close - (1.0 * risk)
     target_2 := close - (2.0 * risk)
     target_3 := close - (3.0 * risk)
 
-// R:R sanity filter (Disable signal if ratio is mathematically unviable)
+// R:R check
 float est_rr = stop_loss != close ? math.abs(target_2 - close) / math.abs(close - stop_loss) : 0.0
 bool rr_valid = est_rr >= min_rr
-
 if (not rr_valid and (exec_buy or exec_sell))
     exec_buy := false
     exec_sell := false
     signal_state := "NEUTRAL (R:R Rejected)"
 
 // =========================================================================
-// 11. TELEMETRY DISPLAY DASHBOARD
+// 12. TELEMETRY DISPLAY DASHBOARD
 // =========================================================================
 var table dash = table.new(get_position(dash_pos), 10, 10, bgcolor=color.new(#090d1a, 10), border_color=color.new(#1e293b, 0), border_width=1)
 
 if (show_dash and barstate.islast)
-    // Header Row
-    table.cell(dash, 0, 0, "ALADDIN MARKET TELEMETRY", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=size.normal, text_align=text.align_center)
+    table.cell(dash, 0, 0, "ALADDIN AI CONFLUENCE MATRIX", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=size.normal, text_align=text.align_center)
     table.merge_cells(dash, 0, 0, 1, 0)
     
-    // Rows Definition
     cell_format(dash, 0, 1, "Market Regime", color.white, color.new(#0f172a, 0))
     cell_format(dash, 1, 1, regime, regime_type == 1 ? color.green : regime_type == 0 ? color.orange : color.red, color.new(#0f172a, 0))
     
@@ -466,30 +407,35 @@ if (show_dash and barstate.islast)
     cell_format(dash, 0, 4, "Participation (RVOL)", color.white, color.new(#0f172a, 0))
     cell_format(dash, 1, 4, str.tostring(rvol, "#.##") + "x", rvol >= 1.5 ? color.green : color.orange, color.new(#0f172a, 0))
     
-    cell_format(dash, 0, 5, "Structure State", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 0, 5, "Structure Alignment", color.white, color.new(#0f172a, 0))
     cell_format(dash, 1, 5, structure_type, color.white, color.new(#0f172a, 0))
     
-    cell_format(dash, 0, 6, "Bullish Confidence", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 0, 6, "Bullish Probability", color.white, color.new(#0f172a, 0))
     cell_format(dash, 1, 6, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0))
     
-    cell_format(dash, 0, 7, "Bearish Confidence", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 0, 7, "Bearish Probability", color.white, color.new(#0f172a, 0))
     cell_format(dash, 1, 7, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0))
     
-    cell_format(dash, 0, 8, "Signal Output", color.white, color.new(#1e293b, 0))
-    cell_format(dash, 1, 8, signal_state, signal_state == "STRONG BUY" ? color.green : signal_state == "STRONG SELL" ? color.red : color.orange, color.new(#1e293b, 0))
+    cell_format(dash, 0, 8, "Veto Status", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 8, veto_long or veto_short ? veto_reason : "None", veto_long or veto_short ? color.red : color.green, color.new(#0f172a, 0))
+
+    cell_format(dash, 0, 9, "Decision Output", color.white, color.new(#1e293b, 0))
+    cell_format(dash, 1, 9, signal_state, signal_state == "STRONG BUY" ? color.green : signal_state == "STRONG SELL" ? color.red : color.orange, color.new(#1e293b, 0))
 
 // =========================================================================
-// 12. PLOTS & DRAWINGS
+// 13. PLOTS & DRAWINGS
 // =========================================================================
 plot(ema_fast, title="Fast EMA", color=color.new(#3b82f6, 0), linewidth=1)
 plot(sma_slow, title="Slow SMA", color=color.new(#f59e0b, 0), linewidth=2)
 
-// Plot Signals shape
-plotshape(exec_buy, title="Buy Execution Triangle", style=shape.triangleup, position=position.belowbar, color=color.new(#10b981, 0), size=size.normal, text="BUY", textcolor=color.white)
-plotshape(exec_sell, title="Sell Execution Triangle", style=shape.triangledown, position=position.abovebar, color=color.new(#ef4444, 0), size=size.normal, text="SELL", textcolor=color.white)
+plotshape(exec_buy, title="Buy Shape", style=shape.triangleup, position=position.belowbar, color=color.new(#10b981, 0), size=size.normal, text="BUY", textcolor=color.white)
+plotshape(exec_sell, title="Sell Shape", style=shape.triangledown, position=position.abovebar, color=color.new(#ef4444, 0), size=size.normal, text="SELL", textcolor=color.white)
+
+// Highlight Candlestick Patterns
+barcolor(is_bullish_engulfing ? color.new(#10b981, 60) : is_bearish_engulfing ? color.new(#ef4444, 60) : na)
 
 // =========================================================================
-// 13. ALERTS CONFIGURATION
+// 14. ALERTS CONFIGURATION
 // =========================================================================
-alertcondition(exec_buy, title="Aladdin Buy Alert", message='{"event": "BUY", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}')
-alertcondition(exec_sell, title="Aladdin Sell Alert", message='{"event": "SELL", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}')
+alertcondition(exec_buy, title="Buy Alert", message='{"event": "BUY", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}')
+alertcondition(exec_sell, title="Sell Alert", message='{"event": "SELL", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}')
