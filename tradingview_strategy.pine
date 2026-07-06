@@ -147,17 +147,46 @@ htf_trend_bullish = htf_ema_fast > htf_sma_slow
 // =========================================================================
 // 7. COMPOSITE SCORING MODEL
 // =========================================================================
-float w_trend = 0.20, float w_momen = 0.15, float w_volum = 0.15
-float w_struct = 0.20, float w_locat = 0.10, float w_volat = 0.10, float w_mtf = 0.10
+float w_trend = 0.20
+float w_momen = 0.15
+float w_volum = 0.15
+float w_struct = 0.20
+float w_locat = 0.10
+float w_volat = 0.10
+float w_mtf = 0.10
 
 if (regime_type == 1) // Trending
-    w_trend := 0.30, w_struct := 0.20, w_mtf := 0.15, w_momen := 0.10, w_volum := 0.10, w_locat := 0.10, w_volat := 0.05
+    w_trend  := 0.30
+    w_struct := 0.20
+    w_mtf    := 0.15
+    w_momen  := 0.10
+    w_volum  := 0.10
+    w_locat  := 0.10
+    w_volat  := 0.05
 else if (regime_type == 0) // Ranging
-    w_locat := 0.30, w_momen := 0.25, w_trend := 0.05, w_struct := 0.10, w_volat := 0.10, w_volum := 0.10, w_mtf := 0.10
+    w_locat  := 0.30
+    w_momen  := 0.25
+    w_trend  := 0.05
+    w_struct := 0.10
+    w_volat  := 0.10
+    w_volum  := 0.10
+    w_mtf    := 0.10
 else if (regime_type == 2) // Squeeze
-    w_volum := 0.25, w_struct := 0.20, w_volat := 0.15, w_trend := 0.15, w_momen := 0.10, w_locat := 0.05, w_mtf := 0.10
+    w_volum  := 0.25
+    w_struct := 0.20
+    w_volat  := 0.15
+    w_trend  := 0.15
+    w_momen  := 0.10
+    w_locat  := 0.05
+    w_mtf    := 0.10
 else if (regime_type == 3) // Volatile
-    w_volat := 0.20, w_mtf := 0.20, w_struct := 0.20, w_trend := 0.10, w_momen := 0.10, w_volum := 0.10, w_locat := 0.10
+    w_volat  := 0.20
+    w_mtf    := 0.20
+    w_struct := 0.20
+    w_trend  := 0.10
+    w_momen  := 0.10
+    w_volum  := 0.10
+    w_locat  := 0.10
 
 // Factors Scoring
 float t_score = 0.0

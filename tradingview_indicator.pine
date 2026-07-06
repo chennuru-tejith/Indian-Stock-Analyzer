@@ -57,12 +57,26 @@ show_dash    = input.bool(true, title="Show Telemetry Dashboard", group=gp_ui)
 dash_pos     = input.string("top_right", title="Dashboard Position", options=["top_right", "bottom_right", "top_left", "bottom_left"], group=gp_ui)
 
 // =========================================================================
-// 2. SESSION FILTER
+// 2. HELPER FUNCTIONS (GLOBAL SCOPE)
+// =========================================================================
+get_position(string pos_str) =>
+    switch pos_str
+        "top_right"    => position.top_right
+        "bottom_right" => position.bottom_right
+        "top_left"     => position.top_left
+        "bottom_left"  => position.bottom_left
+        => position.top_right
+
+cell_format(table t, int col, int row, string txt, color text_c, color bg_c) =>
+    table.cell(t, col, row, txt, text_color=text_c, bgcolor=bg_c, text_size=size.small, text_align=text.align_left)
+
+// =========================================================================
+// 3. SESSION FILTER
 // =========================================================================
 in_session = not use_session or not na(time(timeframe.period, session_time))
 
 // =========================================================================
-// 3. CORE TECHNICAL INDICATORS (CURRENT TIMEFRAME)
+// 4. CORE TECHNICAL INDICATORS (CURRENT TIMEFRAME)
 // =========================================================================
 // Moving Averages
 ema_fast = ta.ema(close, ema_fast_len)
@@ -119,7 +133,7 @@ vwap_upper = vwap_val + (vwap_dev_mult * vwap_stdev)
 vwap_lower = vwap_val - (vwap_dev_mult * vwap_stdev)
 
 // =========================================================================
-// 4. REGIME CLASSIFICATION ENGINE
+// 5. REGIME CLASSIFICATION ENGINE
 // =========================================================================
 // Calculate Price Efficiency (Fractal Efficiency Ratio) over 10 periods
 eff_num = math.abs(close - close[10])
@@ -156,7 +170,7 @@ else
     regime_type := 0
 
 // =========================================================================
-// 5. MARKET STRUCTURE ENGINE (NON-REPAINTING)
+// 6. MARKET STRUCTURE ENGINE (NON-REPAINTING)
 // =========================================================================
 var float last_high = na
 var float last_low = na
@@ -191,14 +205,14 @@ bool bullish_bos = ta.crossover(close, last_high) and is_vol_spike
 bool bearish_bos = ta.crossunder(close, last_low) and is_vol_spike
 
 // =========================================================================
-// 6. MULTI-TIMEFRAME ENGINE (NO LOOKAHEAD SECURITY)
+// 7. MULTI-TIMEFRAME ENGINE (NO LOOKAHEAD SECURITY)
 // =========================================================================
 htf_ema_fast = request.security(syminfo.tickerid, htf_res, ta.ema(close, ema_fast_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
 htf_sma_slow = request.security(syminfo.tickerid, htf_res, ta.sma(close, sma_slow_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
 htf_trend_bullish = htf_ema_fast > htf_sma_slow
 
 // =========================================================================
-// 7. COMPOSITE MULTI-FACTOR SCORING MODEL
+// 8. COMPOSITE MULTI-FACTOR SCORING MODEL
 // =========================================================================
 // Define dynamic weighting matrix based on regime type
 float w_trend = 0.20
@@ -330,7 +344,7 @@ else if (bullish_bos and rvol < 1.0)
     conflict := "Bullish Breakout / Weak Volume"
 
 // =========================================================================
-// 8. HARD VETO guards
+// 9. HARD VETO GUARDS
 // =========================================================================
 bool veto_long = false
 bool veto_short = false
@@ -368,7 +382,7 @@ else if (not in_session)
     veto_reason := "Outside Session Limits"
 
 // =========================================================================
-// 9. SIGNAL DEPLOYMENT & RISK ENGINE
+// 10. SIGNAL DEPLOYMENT & RISK ENGINE
 // =========================================================================
 // Trigger Thresholds
 int buy_threshold = sys_mode == "CONSERVATIVE" ? 75 : sys_mode == "BALANCED" ? 65 : 55
@@ -430,15 +444,11 @@ if (not rr_valid and (exec_buy or exec_sell))
     signal_state := "NEUTRAL (R:R Rejected)"
 
 // =========================================================================
-// 10. TELEMETRY DISPLAY DASHBOARD
+// 11. TELEMETRY DISPLAY DASHBOARD
 // =========================================================================
-var table dash = table.new(dash_pos, 10, 10, bgcolor=color.new(#090d1a, 10), border_color=color.new(#1e293b, 0), border_width=1)
+var table dash = table.new(get_position(dash_pos), 10, 10, bgcolor=color.new(#090d1a, 10), border_color=color.new(#1e293b, 0), border_width=1)
 
 if (show_dash and barstate.islast)
-    // Styling Helper
-    cell_format = (table t, int col, int row, string txt, color text_c, color bg_c) =>
-        table.cell(t, col, row, txt, text_color=text_c, bgcolor=bg_c, text_size=size.small, text_align=text.align_left)
-    
     // Header Row
     table.cell(dash, 0, 0, "ALADDIN MARKET TELEMETRY", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=size.normal, text_align=text.align_center)
     table.merge_cells(dash, 0, 0, 1, 0)
@@ -469,7 +479,7 @@ if (show_dash and barstate.islast)
     cell_format(dash, 1, 8, signal_state, signal_state == "STRONG BUY" ? color.green : signal_state == "STRONG SELL" ? color.red : color.orange, color.new(#1e293b, 0))
 
 // =========================================================================
-// 11. PLOTS & DRAWINGS
+// 12. PLOTS & DRAWINGS
 // =========================================================================
 plot(ema_fast, title="Fast EMA", color=color.new(#3b82f6, 0), linewidth=1)
 plot(sma_slow, title="Slow SMA", color=color.new(#f59e0b, 0), linewidth=2)
@@ -479,7 +489,7 @@ plotshape(exec_buy, title="Buy Execution Triangle", style=shape.triangleup, posi
 plotshape(exec_sell, title="Sell Execution Triangle", style=shape.triangledown, position=position.abovebar, color=color.new(#ef4444, 0), size=size.normal, text="SELL", textcolor=color.white)
 
 // =========================================================================
-// 12. ALERTS CONFIGURATION
+// 13. ALERTS CONFIGURATION
 // =========================================================================
 alertcondition(exec_buy, title="Aladdin Buy Alert", message='{"event": "BUY", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}')
 alertcondition(exec_sell, title="Aladdin Sell Alert", message='{"event": "SELL", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}')
