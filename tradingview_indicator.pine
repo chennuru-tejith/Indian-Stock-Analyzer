@@ -1,0 +1,192 @@
+//@version=5
+indicator("Aladdin Fusion AI Predictive Signal Engine", shorttitle="Aladdin Fusion AI", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// ==========================================
+// 1. INPUT PARAMETERS (USER CUSTOMIZATION)
+// ==========================================
+gp_indicators  = "Technical Indicator Settings"
+rsi_period     = input.int(14, title="RSI Period", minval=1, group=gp_indicators)
+rsi_overbought = input.int(70, title="RSI Overbought Level", minval=50, maxval=100, group=gp_indicators)
+rsi_oversold   = input.int(30, title="RSI Oversold Level", minval=0, maxval=50, group=gp_indicators)
+ema_fast_len   = input.int(20, title="Fast EMA Period", minval=1, group=gp_indicators)
+sma_slow_len   = input.int(200, title="Slow SMA Period", minval=1, group=gp_indicators)
+
+gp_volume      = "Volume Validation Settings"
+vol_ma_len     = input.int(20, title="Volume SMA Period", minval=1, group=gp_volume)
+vol_multiplier = input.float(1.25, title="Volume Expansion Multiplier", step=0.05, group=gp_volume)
+
+gp_pivots      = "Support / Resistance Settings"
+pivot_lookback = input.int(5, title="Pivot Channel Lookback", minval=2, group=gp_pivots)
+
+gp_forecasts   = "AI Price Projections Settings"
+atr_len        = input.int(14, title="ATR Length for Volatility", minval=1, group=gp_forecasts)
+projection_len = input.int(5, title="Short-Term Forecast (Bars)", minval=1, group=gp_forecasts)
+
+// ==========================================
+// 2. TECHNICAL CALCULATIONS & INDICATORS
+// ==========================================
+// Moving Averages
+ema_fast = ta.ema(close, ema_fast_len)
+sma_slow = ta.sma(close, sma_slow_len)
+
+// Relative Strength Index (RSI)
+rsi_val = ta.rsi(close, rsi_period)
+
+// MACD (12, 26, 9)
+[macd_line, signal_line, macd_hist] = ta.macd(close, 12, 26, 9)
+
+// Volume Moving Average
+vol_ma = ta.sma(volume, vol_ma_len)
+vol_expanded = volume > vol_ma * vol_multiplier
+
+// Support & Resistance Levels (Local Pivots Lookback)
+pivot_high = ta.pivothigh(high, pivot_lookback, pivot_lookback)
+pivot_low = ta.pivotlow(low, pivot_lookback, pivot_lookback)
+
+var float support_level = na
+var float resistance_level = na
+
+if (not na(pivot_low))
+    support_level := pivot_low
+if (not na(pivot_high))
+    resistance_level := pivot_high
+
+// ATR Volatility Range
+atr = ta.atr(atr_len)
+
+// ==========================================
+// 3. CANDLESTICK PATTERN DETECTION
+// ==========================================
+body = Math.abs(close - open)
+range_c = high - low
+is_bullish = close >= open
+is_bearish = close < open
+
+body_top = Math.max(open, close)
+body_bottom = Math.min(open, close)
+
+upper_shadow = high - body_top
+lower_shadow = body_bottom - low
+
+// Average range over 10 periods
+avg_range = ta.sma(range_c, 10)
+
+// Hammer & Hanging Man
+is_hammer_shape = lower_shadow >= body * 2 and upper_shadow <= range_c * 0.1 and range_c > avg_range * 0.4
+
+// Inverted Hammer & Shooting Star
+is_inverted_hammer_shape = upper_shadow >= body * 2 and lower_shadow <= range_c * 0.1 and range_c > avg_range * 0.4
+
+// Engulfing Patterns
+is_bullish_engulfing = is_bearish[1] and is_bullish and open <= close[1] and close >= open[1] and body > body[1]
+is_bearish_engulfing = is_bullish[1] and is_bearish and open >= close[1] and close <= open[1] and body > body[1]
+
+// Tweezer Patterns (0.05% tolerance)
+is_tweezer_bottom = is_bearish[1] and is_bullish and Math.abs(low - low[1]) / low <= 0.0005
+is_tweezer_top = is_bullish[1] and is_bearish and Math.abs(high - high[1]) / high <= 0.0005
+
+// Spinning Top (Indecision)
+is_spinning_top = body >= range_c * 0.05 and body <= range_c * 0.25 and upper_shadow >= body * 1.2 and lower_shadow >= body * 1.2 and range_c > avg_range * 0.3
+
+// Doji
+is_doji = body <= range_c * 0.05 and range_c > avg_range * 0.2
+
+// ==========================================
+// 4. ALADDIN FUSION SIGNAL CRITERIA
+// ==========================================
+// Trend Pillar
+trend_score = 0
+if (not na(sma_slow) and close > sma_slow)
+    trend_score := trend_score + 30
+if (close > ema_fast)
+    trend_score := trend_score + 40
+if (macd_hist > 0)
+    trend_score := trend_score + 30
+
+// Oscillator Pillar
+oscillator_score = 50
+if (rsi_val <= rsi_oversold)
+    oscillator_score := 100
+else if (rsi_val >= rsi_overbought)
+    oscillator_score := 0
+else
+    oscillator_score := Math.round(100 - ((rsi_val - rsi_oversold) * (100 / (rsi_overbought - rsi_oversold))))
+
+// Pattern Pillar
+pattern_score = 50
+if (is_bullish_engulfing or is_tweezer_bottom)
+    pattern_score := pattern_score + 35
+if (is_bearish_engulfing or is_tweezer_top)
+    pattern_score := pattern_score - 35
+if (is_hammer_shape and rsi_val <= 40)
+    pattern_score := pattern_score + 25
+if (is_inverted_hammer_shape and rsi_val >= 60)
+    pattern_score := pattern_score - 25
+
+// Fused Scalping & Swing Trading Score
+fused_score = Math.round((trend_score + oscillator_score + pattern_score) / 3)
+
+buy_signal = fused_score >= 65 and vol_expanded
+sell_signal = fused_score <= 35 and vol_expanded
+
+// ==========================================
+// 5. VOLATILITY PRICE TARGET PROJECTIONS
+// ==========================================
+// Standard deviation projection boundary using ATR
+// Expected range = 1.65 * ATR * sqrt(t) -> 90% confidence
+atr_vol_factor = 1.65 * atr * Math.sqrt(projection_len)
+
+// Shift forecast targets based on score momentum
+expected_return_pct = 0.0
+if (fused_score >= 60)
+    expected_return_pct := ((fused_score - 50) / 50) * 3.5
+else if (fused_score <= 40)
+    expected_return_pct := ((fused_score - 50) / 50) * 3.5
+
+forecast_midpoint = close * (1 + expected_return_pct / 100)
+forecast_target_max = forecast_midpoint + (atr_vol_factor / 2)
+forecast_target_min = forecast_midpoint - (atr_vol_factor / 2)
+
+// ==========================================
+// 6. CHART RENDERING & TELEMETRY
+// ==========================================
+// Plot Moving Averages
+plot(ema_fast, title="Fast EMA 20", color=color.new(#3b82f6, 0), linewidth=1)
+plot(sma_slow, title="Slow SMA 200", color=color.new(#f59e0b, 0), linewidth=2)
+
+// Plot Support & Resistance Lines
+plot(support_level, title="Dynamic Support Level", color=color.new(#10b981, 60), style=plot.style_linebr, linewidth=1)
+plot(resistance_level, title="Dynamic Resistance Level", color=color.new(#ef4444, 60), style=plot.style_linebr, linewidth=1)
+
+// Plot BUY / SELL Signal Markers
+plotshape(buy_signal, title="Aladdin BUY Signal", style=shape.triangleup, position=position.belowbar, color=color.new(#10b981, 0), size=size.normal, text="BUY", textcolor=color.white)
+plotshape(sell_signal, title="Aladdin SELL Signal", style=shape.triangledown, position=position.abovebar, color=color.new(#ef4444, 0), size=size.normal, text="SELL", textcolor=color.white)
+
+// Highlight Candlestick Patterns
+barcolor(is_bullish_engulfing ? color.new(#10b981, 50) : is_bearish_engulfing ? color.new(#ef4444, 50) : na)
+
+// Draw AI Forecast Target Bands (Visual Projection Channel)
+var line forecast_max_line = na
+var line forecast_min_line = na
+var label forecast_label = na
+
+if (barstate.islast)
+    // Clear old forecast drawings
+    line.delete(forecast_max_line)
+    line.delete(forecast_min_line)
+    label.delete(forecast_label)
+    
+    // Draw forecast projection boundaries
+    forecast_max_line := line.new(bar_index, close, bar_index + projection_len, forecast_target_max, color=color.new(#10b981, 30), width=2, style=line.style_dashed)
+    forecast_min_line := line.new(bar_index, close, bar_index + projection_len, forecast_target_min, color=color.new(#ef4444, 30), width=2, style=line.style_dashed)
+    
+    // Draw predictions telemetry scoreboard box
+    label_text = "Aladdin Fusion Forecasts:\n" +
+                 "--------------------------\n" +
+                 "Direction: " + (fused_score >= 60 ? "BULLISH 📈" : fused_score <= 40 ? "BEARISH 📉" : "SIDEWAYS 📊") + "\n" +
+                 "Midpoint: ₹" + str.tostring(forecast_midpoint, "#.##") + "\n" +
+                 "Target Range:\n" +
+                 "₹" + str.tostring(forecast_target_min, "#.##") + " - ₹" + str.tostring(forecast_target_max, "#.##") + "\n" +
+                 "Score Confidence: " + str.tostring(fused_score) + "/100"
+                 
+    forecast_label := label.new(bar_index + projection_len, forecast_midpoint, text=label_text, color=color.new(#090d1a, 10), textcolor=color.white, style=label.style_label_left, size=size.normal)
