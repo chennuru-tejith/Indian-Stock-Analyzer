@@ -190,8 +190,45 @@ export function generateSignals(enrichedCandles, options = {}) {
     const isLatestCandle = idx === enrichedCandles.length - 1;
     const finalNewsScore = isLatestCandle ? newsSentimentScore : 50;
 
-    // 6. Calculate Unified Score (0 - 100)
-    const finalScore = Math.round((trendScore + oscillatorScore + patternScore + finalNewsScore) / 4);
+    // 5b. Regime Classification & Dynamic Weight Shifting
+    // Fractal price efficiency (K) over last 10 candles
+    let priceEfficiency = 1.0;
+    if (idx >= 10) {
+      const effNum = Math.abs(close - enrichedCandles[idx - 10].close);
+      let effDenom = 0;
+      for (let j = idx - 9; j <= idx; j++) {
+        effDenom += Math.abs(enrichedCandles[j].close - enrichedCandles[j - 1].close);
+      }
+      priceEfficiency = effDenom > 0 ? effNum / effDenom : 1.0;
+    }
+
+    const isTrending = priceEfficiency >= 0.45;
+    
+    // Dynamic weights allocation
+    let wTrend = 0.25;
+    let wOscillator = 0.25;
+    let wPattern = 0.25;
+    let wNews = 0.25;
+
+    if (isTrending) {
+      wTrend = 0.40;
+      wOscillator = 0.15;
+      wPattern = 0.30;
+      wNews = 0.15;
+    } else {
+      wTrend = 0.15;
+      wOscillator = 0.45;
+      wPattern = 0.25;
+      wNews = 0.15;
+    }
+
+    // 6. Calculate Unified Score (0 - 100) with dynamic weights
+    const finalScore = Math.round(
+      (trendScore * wTrend) +
+      (oscillatorScore * wOscillator) +
+      (patternScore * wPattern) +
+      (finalNewsScore * wNews)
+    );
 
     // 7. Map Unified Score back to Signal Recommendations
     // >= 75: Strong Buy, >= 60: Buy, <= 25: Strong Sell, <= 40: Sell, 41-59: Hold
