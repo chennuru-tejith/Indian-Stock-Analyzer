@@ -86,6 +86,31 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
   const actualRisk = sharesToBuy * diffSL;
   const actualReward = sharesToBuy * diffTP;
 
+  // Broker execution diagnostics (ADV and Slippage)
+  const last30Daily = candles ? candles.slice(-30) : [];
+  const totalVol = last30Daily.reduce((sum, c) => sum + (c.volume || 0), 0);
+  const adv = last30Daily.length > 0 ? totalVol / last30Daily.length : 1;
+  const orderPctAdv = adv > 0 ? (sharesToBuy / adv) * 100 : 0;
+  
+  // Parametric volatility reference
+  const calcDailyVolReference = (candlesSeries) => {
+    if (!candlesSeries || candlesSeries.length < 10) return 0.018;
+    const last30 = candlesSeries.slice(-30);
+    const returns = [];
+    for (let i = 1; i < last30.length; i++) {
+      if (last30[i - 1].close > 0) {
+        returns.push((last30[i].close - last30[i - 1].close) / last30[i - 1].close);
+      }
+    }
+    if (returns.length < 5) return 0.018;
+    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / (returns.length - 1);
+    return Math.sqrt(variance);
+  };
+  const dailyVolFraction = calcDailyVolReference(candles);
+  const estimatedSlippagePercent = 0.1 * Math.sqrt(Math.max(0.0001, sharesToBuy / adv)) * dailyVolFraction * 100;
+  const estimatedSlippageVal = totalTradeValue * (estimatedSlippagePercent / 100);
+
   // Single stock historical risk metrics
   const calculateRiskMetrics = (candlesSeries, method = 'PARAMETRIC') => {
     if (!candlesSeries || candlesSeries.length < 10) {
@@ -369,6 +394,18 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
       const riskFreeRate = 0.06;
       const sharpeRatio = portfolioAnnualVol > 0 ? (pAnnualizedReturn - riskFreeRate) / portfolioAnnualVol : 0;
 
+      // 8. Risk-Parity Weight Recommendation
+      const invVols = stats.map(s => s.dailyVol > 0 ? 1 / s.dailyVol : 0);
+      const sumInvVols = invVols.reduce((sum, v) => sum + v, 0);
+      const riskParityWeights = stats.map((s, idx) => {
+        const rpWeight = sumInvVols > 0 ? Math.round((invVols[idx] / sumInvVols) * 100) : 0;
+        return { symbol: s.symbol, rpWeight };
+      });
+      const rpSum = riskParityWeights.reduce((sum, w) => sum + w.rpWeight, 0);
+      if (rpSum !== 100 && riskParityWeights.length > 0) {
+        riskParityWeights[0].rpWeight += (100 - rpSum);
+      }
+
       setPortfolioResults({
         stats,
         totalWeight: successes.reduce((sum, s) => sum + s.weight, 0),
@@ -381,7 +418,8 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
         diversificationBenefit,
         individualVaRs,
         riskContributions,
-        sharpeRatio
+        sharpeRatio,
+        riskParityWeights
       });
     } catch (err) {
       console.error("Portfolio simulation error:", err);
@@ -711,6 +749,46 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
               </div>
             </div>
 
+            {/* Broker Liquidity & Execution Slippage Diagnostics */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '0.85rem', borderRadius: '12px', background: 'hsla(42, 100%, 53%, 0.02)', border: '1px solid rgba(245, 158, 11, 0.15)' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Info size={14} style={{ color: 'var(--color-warning)' }} />
+                Broker Execution & Liquidity Analysis
+              </span>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'hsla(224, 60%, 5%, 0.4)', padding: '0.65rem', borderRadius: '8px' }}>
+                <div>
+                  <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', display: 'block' }}>Order Size vs ADV</span>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {orderPctAdv.toFixed(3)}%
+                  </span>
+                  <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', display: 'block' }}>
+                    ADV: {Math.round(adv).toLocaleString()}
+                  </span>
+                </div>
+                
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', display: 'block' }}>Est. Market Slippage</span>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: orderPctAdv > 1.0 ? 'var(--color-bearish)' : 'var(--color-bullish)' }}>
+                    ₹{estimatedSlippageVal.toFixed(2)}
+                  </span>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', display: 'block' }}>
+                    ({estimatedSlippagePercent.toFixed(3)}%)
+                  </span>
+                </div>
+              </div>
+
+              {/* Liquidity Status Indicator */}
+              <div style={{ 
+                fontSize: '0.68rem', 
+                fontWeight: 600, 
+                color: orderPctAdv > 1.0 ? 'var(--color-bearish)' : orderPctAdv > 0.1 ? 'var(--color-warning)' : 'var(--color-bullish)',
+                textAlign: 'left'
+              }}>
+                Status: {orderPctAdv > 1.0 ? '🔴 Illiquid Position Size (High Slippage)' : orderPctAdv > 0.1 ? '🟡 Moderate Execution Impact' : '🟢 Highly Liquid execution (Low Impact)'}
+              </div>
+            </div>
+
             {/* Aladdin Risk Engine */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '0.85rem', borderRadius: '12px', background: 'hsla(180, 100%, 45%, 0.02)', border: '1px solid rgba(0, 242, 254, 0.15)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -955,6 +1033,62 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
                       {portfolioResults.sharpeRatio.toFixed(2)}
                     </span>
                   </div>
+                </div>
+
+                {/* Dynamic Rebalancing Recommender (Investor Focus) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '0.85rem', borderRadius: '12px', background: 'hsla(145, 90%, 43%, 0.02)', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Scale size={14} style={{ color: 'var(--color-bullish)' }} />
+                    Optimal Volatility Risk-Parity Rebalance
+                  </span>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', background: 'hsla(224, 60%, 5%, 0.4)', padding: '0.65rem', borderRadius: '8px' }}>
+                    {portfolioResults.riskParityWeights.map((rpW) => {
+                      const currentW = portfolio.find(p => p.symbol === rpW.symbol)?.weight || 0;
+                      const diff = rpW.rpWeight - currentW;
+                      
+                      return (
+                        <div key={rpW.symbol} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 600 }}>{rpW.symbol.split('.')[0]}</span>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>{currentW}% ➜</span>
+                            <span style={{ fontWeight: 'bold', color: 'var(--color-bullish)' }}>{rpW.rpWeight}%</span>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 'bold', color: diff > 0 ? 'var(--color-bullish)' : diff < 0 ? 'var(--color-bearish)' : 'var(--text-muted)' }}>
+                              ({diff > 0 ? '+' : ''}{diff}%)
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    className="timeframe-btn"
+                    style={{ 
+                      width: '100%', 
+                      height: '28px', 
+                      background: 'rgba(16, 185, 129, 0.15)', 
+                      border: '1px solid var(--color-bullish)', 
+                      color: 'var(--color-bullish)',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.25rem'
+                    }}
+                    onClick={() => {
+                      const updatedPortfolio = portfolio.map(item => {
+                        const rp = portfolioResults.riskParityWeights.find(r => r.symbol === item.symbol);
+                        return rp ? { ...item, weight: rp.rpWeight } : item;
+                      });
+                      setPortfolio(updatedPortfolio);
+                    }}
+                  >
+                    Apply Risk-Parity Rebalance
+                  </button>
                 </div>
 
                 {/* Risk Contribution vs Allocation Weight */}
