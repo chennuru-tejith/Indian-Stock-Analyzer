@@ -6,6 +6,7 @@ import BacktestResults from './components/BacktestResults';
 import StockIntelligence from './components/StockIntelligence';
 import GlobalMacroPanel from './components/GlobalMacroPanel';
 import RiskManagerPanel from './components/RiskManagerPanel';
+import ValueScreenerPanel from './components/ValueScreenerPanel';
 import { Sliders, RefreshCw, BarChart2, Activity, Play, BrainCircuit, Globe, Shield } from 'lucide-react';
 import './App.css';
 
@@ -403,6 +404,14 @@ export default function App() {
               <BarChart2 size={12} />
               Backtester
             </button>
+            <button 
+              className={`timeframe-btn ${activeTab === 'SCREENER' ? 'active' : ''}`}
+              style={{ flex: 1, padding: '0.6rem 0.15rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem', fontSize: '0.7rem' }}
+              onClick={() => setActiveTab('SCREENER')}
+            >
+              <Shield size={12} />
+              Screener
+            </button>
           </div>
 
           <div style={{ flex: 1, minHeight: 0 }}>
@@ -418,6 +427,11 @@ export default function App() {
                 loading={multiTimeframeLoading}
                 candles={candles}
               />
+            ) : activeTab === 'SCREENER' ? (
+              <ValueScreenerPanel onSelectSymbol={(sym) => {
+                setSymbol(sym);
+                setActiveTab('INTELLIGENCE');
+              }} />
             ) : (
               <div>
                 {backtestLoading ? (

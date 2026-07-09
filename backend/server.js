@@ -8,6 +8,7 @@ import { generateSignals } from './services/signalService.js';
 import { runBacktest } from './services/backtestService.js';
 import { fetchGlobalIndicators, calculatePredictiveTrend } from './services/macroService.js';
 import { generateProjections } from './services/predictiveEngine.js';
+import { getCachedScreenerResults, runFundamentalScreener } from './services/screenerService.js';
 
 dotenv.config();
 
@@ -326,6 +327,46 @@ app.get('/api/stock/:symbol/multi-timeframe', async (req, res) => {
     });
   } catch (error) {
     console.error(`Error in /api/stock/${symbol}/multi-timeframe:`, error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Route: GET /api/screener/results
+ * Returns the daily fundamental-price divergence screener report.
+ */
+app.get('/api/screener/results', async (req, res) => {
+  try {
+    const report = await getCachedScreenerResults();
+    res.json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error('Error in GET /api/screener/results:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Route: POST /api/screener/run
+ * Triggers a live fundamental-price divergence screening scan of all equities.
+ */
+app.post('/api/screener/run', async (req, res) => {
+  try {
+    const report = await runFundamentalScreener();
+    res.json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error('Error in POST /api/screener/run:', error.message);
     res.status(500).json({
       success: false,
       error: error.message
