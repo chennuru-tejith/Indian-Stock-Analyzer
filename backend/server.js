@@ -19,6 +19,10 @@ const PORT = process.env.PORT || 5000;
 const newsCache = {};
 const NEWS_CACHE_TTL = 3 * 60 * 1000; // 3 minutes TTL
 
+// Daily Screener Run Rate Limiting Cooldown (to avoid Yahoo API blockages)
+let lastScreenerRunTime = 0;
+const SCREENER_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes cooldown
+
 async function getNewsSentimentCached(symbol) {
   const sym = symbol.trim().toUpperCase();
   const cached = newsCache[sym];
@@ -359,8 +363,20 @@ app.get('/api/screener/results', async (req, res) => {
  * Triggers a live fundamental-price divergence screening scan of all equities.
  */
 app.post('/api/screener/run', async (req, res) => {
+  const now = Date.now();
+  const elapsed = now - lastScreenerRunTime;
+  if (elapsed < SCREENER_COOLDOWN_MS) {
+    const remainingSeconds = Math.ceil((SCREENER_COOLDOWN_MS - elapsed) / 1000);
+    return res.status(429).json({
+      success: false,
+      error: `Screener live scan is on cooldown to protect Yahoo Finance API rate limits. Please retry in ${remainingSeconds} seconds.`,
+      cooldownRemaining: remainingSeconds
+    });
+  }
+
   try {
     const report = await runFundamentalScreener();
+    lastScreenerRunTime = Date.now();
     res.json({
       success: true,
       report
@@ -384,9 +400,22 @@ app.use((err, req, res, next) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  const startServer = (portAttempt) => {
+    const server = app.listen(portAttempt, () => {
+      console.log(`Server running on http://localhost:${portAttempt}`);
+    });
+    
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.warn(`Port ${portAttempt} is occupied. Attempting port ${portAttempt + 1}...`);
+        startServer(portAttempt + 1);
+      } else {
+        console.error("Server start error:", err.message);
+      }
+    });
+  };
+  
+  startServer(PORT);
 }
 
 export default app;
