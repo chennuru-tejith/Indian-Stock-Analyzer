@@ -1,0 +1,30 @@
+{
+  "connected": true,
+  "broker": "Sandbox",
+  "apiKey": "key",
+  "balance": 500100,
+  "marginAvailable": 500100,
+  "positions": [],
+  "orders": [
+    {
+      "orderId": "ORD-573959",
+      "symbol": "ITC.NS",
+      "side": "BUY",
+      "quantity": 10,
+      "price": 400,
+      "orderType": "LIMIT",
+      "status": "COMPLETED",
+      "timestamp": "2026-07-10T17:08:12.954Z"
+    },
+    {
+      "orderId": "ORD-540476",
+      "symbol": "ITC.NS",
+      "side": "SELL",
+      "quantity": 10,
+      "price": 410,
+      "orderType": "LIMIT",
+      "status": "COMPLETED",
+      "timestamp": "2026-07-10T17:08:12.957Z"
+    }
+  ]
+}

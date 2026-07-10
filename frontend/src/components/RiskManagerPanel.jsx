@@ -33,6 +33,62 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
   // Client-Side History Cache (stored in useRef to persist across renders)
   const historyCache = useRef({});
 
+  // Broker connection status & execution states
+  const [brokerConnected, setBrokerConnected] = useState(false);
+  const [brokerLoading, setBrokerLoading] = useState(false);
+
+  useEffect(() => {
+    checkBrokerStatus();
+  }, [selectedSymbol]);
+
+  const checkBrokerStatus = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/broker/account');
+      const data = await res.json();
+      if (data.success && data.account.connected) {
+        setBrokerConnected(true);
+      } else {
+        setBrokerConnected(false);
+      }
+    } catch (e) {
+      setBrokerConnected(false);
+    }
+  };
+
+  const executeOrder = async () => {
+    if (sharesToBuy <= 0) {
+      alert("Invalid shares count to execute.");
+      return;
+    }
+    setBrokerLoading(true);
+    try {
+      const res = await fetch('http://localhost:5000/api/broker/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: selectedSymbol,
+          side: 'BUY',
+          quantity: sharesToBuy,
+          price: entry,
+          orderType: 'LIMIT',
+          stopLoss,
+          target
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Order Executed Successfully!\n${data.message}`);
+        checkBrokerStatus(); // reload details
+      } else {
+        alert(`Failed to execute order:\n${data.error}`);
+      }
+    } catch (err) {
+      alert(`Network error executing order: ${err.message}`);
+    } finally {
+      setBrokerLoading(false);
+    }
+  };
+
   // Sync inputs with intelligence price levels on stock change
   useEffect(() => {
     if (intelligenceData && intelligenceData.success) {
@@ -688,6 +744,35 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
                 </div>
               </div>
             </div>
+
+            {/* Execute Live Order Button */}
+            {brokerConnected && (
+              <button
+                className="btn-primary"
+                onClick={executeOrder}
+                disabled={brokerLoading}
+                style={{ 
+                  margin: 0, 
+                  background: 'linear-gradient(135deg, var(--color-bullish), #059669)',
+                  boxShadow: '0 0 10px rgba(16, 185, 129, 0.2)',
+                  height: '36px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700
+                }}
+              >
+                {brokerLoading ? (
+                  <>
+                    <RefreshCw size={14} className="spin-anim" />
+                    Executing...
+                  </>
+                ) : (
+                  <>
+                    <Play size={14} />
+                    Execute Live BUY Order (₹{totalTradeValue.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                  </>
+                )}
+              </button>
+            )}
 
             {/* R:R Ratio Card */}
             <div style={{

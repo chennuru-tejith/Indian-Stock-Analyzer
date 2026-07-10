@@ -9,6 +9,7 @@ import { runBacktest } from './services/backtestService.js';
 import { fetchGlobalIndicators, calculatePredictiveTrend } from './services/macroService.js';
 import { generateProjections } from './services/predictiveEngine.js';
 import { getCachedScreenerResults, runFundamentalScreener } from './services/screenerService.js';
+import { connectBroker, disconnectBroker, getAccountDetails, placeBrokerOrder } from './services/brokerService.js';
 
 dotenv.config();
 
@@ -384,6 +385,73 @@ app.post('/api/screener/run', async (req, res) => {
   } catch (error) {
     console.error('Error in POST /api/screener/run:', error.message);
     res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Route: GET /api/broker/account
+ * Returns broker connection status, balances, positions and order logs.
+ */
+app.get('/api/broker/account', (req, res) => {
+  try {
+    const account = getAccountDetails();
+    res.json({
+      success: true,
+      account
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Route: POST /api/broker/connect
+ * Body: { broker, apiKey, apiSecret, pin }
+ */
+app.post('/api/broker/connect', (req, res) => {
+  const { broker, apiKey, apiSecret, pin } = req.body;
+  try {
+    const account = connectBroker(broker, apiKey, apiSecret, pin);
+    res.json({
+      success: true,
+      message: `Successfully connected to ${broker} account.`,
+      account
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Route: POST /api/broker/disconnect
+ */
+app.post('/api/broker/disconnect', (req, res) => {
+  try {
+    const account = disconnectBroker();
+    res.json({
+      success: true,
+      message: "Successfully disconnected broker account.",
+      account
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Route: POST /api/broker/order
+ * Body: { symbol, side, quantity, price, orderType, stopLoss, target }
+ */
+app.post('/api/broker/order', (req, res) => {
+  const { symbol, side, quantity, price, orderType, stopLoss, target } = req.body;
+  try {
+    const result = placeBrokerOrder(symbol, side, quantity, price, orderType, stopLoss, target);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({
       success: false,
       error: error.message
     });
