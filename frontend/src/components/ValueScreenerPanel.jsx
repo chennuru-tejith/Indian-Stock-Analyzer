@@ -6,11 +6,6 @@ export default function ValueScreenerPanel({ onSelectSymbol }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch cached daily results on mount
-  useEffect(() => {
-    fetchScreenerResults();
-  }, []);
-
   const fetchScreenerResults = async () => {
     setLoading(true);
     setError(null);
@@ -29,6 +24,11 @@ export default function ValueScreenerPanel({ onSelectSymbol }) {
       setLoading(false);
     }
   };
+
+  // Fetch cached daily results on mount
+  useEffect(() => {
+    fetchScreenerResults();
+  }, []);
 
   const runLiveScreener = async () => {
     setLoading(true);

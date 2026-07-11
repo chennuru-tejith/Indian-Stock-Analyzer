@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, Coins, Scale, TrendingUp, TrendingDown, RefreshCw, AlertTriangle, CheckCircle, Plus, Trash2, Info } from 'lucide-react';
+import { Shield, Coins, Scale, TrendingUp, TrendingDown, RefreshCw, AlertTriangle, CheckCircle, Plus, Trash2, Info, Play } from 'lucide-react';
 
 export default function RiskManagerPanel({ selectedSymbol, intelligenceData, multiTimeframeData, loading, candles }) {
   // Navigation Tabs: 'POSITION' | 'PORTFOLIO'
@@ -37,10 +37,6 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
   const [brokerConnected, setBrokerConnected] = useState(false);
   const [brokerLoading, setBrokerLoading] = useState(false);
 
-  useEffect(() => {
-    checkBrokerStatus();
-  }, [selectedSymbol]);
-
   const checkBrokerStatus = async () => {
     try {
       const res = await fetch('http://localhost:5000/api/broker/account');
@@ -54,6 +50,10 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
       setBrokerConnected(false);
     }
   };
+
+  useEffect(() => {
+    checkBrokerStatus();
+  }, [selectedSymbol]);
 
   const executeOrder = async () => {
     if (sharesToBuy <= 0) {
@@ -246,7 +246,7 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
   };
 
   // Portfolio Simulator logic
-  const runPortfolioSimulation = async () => {
+  async function runPortfolioSimulation() {
     setPortfolioLoading(true);
     setPortfolioError(null);
     try {

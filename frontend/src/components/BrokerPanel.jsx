@@ -12,11 +12,6 @@ export default function BrokerPanel({ activeSymbol, activePrice }) {
   const [apiSecret, setApiSecret] = useState('');
   const [pin, setPin] = useState('');
 
-  // Fetch account status on mount
-  useEffect(() => {
-    fetchAccountDetails();
-  }, []);
-
   const fetchAccountDetails = async () => {
     setLoading(true);
     setError(null);
@@ -33,6 +28,11 @@ export default function BrokerPanel({ activeSymbol, activePrice }) {
       setLoading(false);
     }
   };
+
+  // Fetch account status on mount
+  useEffect(() => {
+    fetchAccountDetails();
+  }, []);
 
   const handleConnect = async (e) => {
     e.preventDefault();
