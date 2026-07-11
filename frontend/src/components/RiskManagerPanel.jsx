@@ -462,9 +462,23 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
         riskParityWeights[0].rpWeight += (100 - rpSum);
       }
 
+      // 9. Portfolio Stress Test Betas relative to active stock benchmark (stats[0])
+      const benchmarkVol = stats[0].dailyVol;
+      const individualBetas = stats.map((s, idx) => {
+        const corr = correlationMatrix[s.symbol][stats[0].symbol];
+        const beta = benchmarkVol > 0 ? corr * (s.dailyVol / benchmarkVol) : 1.0;
+        return { symbol: s.symbol, beta };
+      });
+      const portfolioBeta = stats.reduce((sum, s, idx) => {
+        const w_i = normalizedWeights[idx] / 100;
+        return sum + w_i * individualBetas[idx].beta;
+      }, 0);
+
       setPortfolioResults({
         stats,
         totalWeight: successes.reduce((sum, s) => sum + s.weight, 0),
+        portfolioBeta,
+        individualBetas,
         correlationMatrix,
         portfolioDailyVol: portfolioDailyVol * 100,
         portfolioAnnualVol: portfolioAnnualVol * 100,
@@ -1266,6 +1280,47 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+
+                {/* Portfolio Stress Testing Suite (Crash Test Simulator) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '0.85rem', borderRadius: '12px', background: 'hsla(355, 90%, 61%, 0.02)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <AlertTriangle size={14} style={{ color: 'var(--color-bearish)' }} />
+                      Portfolio Macro Stress Simulator
+                    </span>
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>
+                      Beta (βp): {portfolioResults.portfolioBeta.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {[
+                      { name: "Covid-Style Liquidity Crash", desc: "Index -30% systemic drop", move: -30.0 },
+                      { name: "Crude Oil Inflation Spike", desc: "Brent Crude +50%, Index -15%", move: -15.0 },
+                      { name: "Fed Tightening / capital flight", desc: "Yield surge, Index -10%", move: -10.0 }
+                    ].map((sc, idx) => {
+                      const expectedDrawdown = portfolioResults.portfolioBeta * sc.move;
+                      const expectedLossVal = (capital * Math.abs(expectedDrawdown)) / 100;
+                      
+                      return (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0.65rem', background: 'hsla(224, 60%, 5%, 0.4)', border: '1px solid var(--card-border)', borderRadius: '8px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.05rem', textAlign: 'left' }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-primary)' }}>{sc.name}</span>
+                            <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)' }}>{sc.desc}</span>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-bearish)', fontFamily: 'var(--font-mono)', display: 'block' }}>
+                              {expectedDrawdown.toFixed(1)}%
+                            </span>
+                            <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', display: 'block' }}>
+                              -₹{Math.round(expectedLossVal).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
