@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Shield, Coins, Scale, TrendingUp, TrendingDown, RefreshCw, AlertTriangle, CheckCircle, Plus, Trash2, Info, Play } from 'lucide-react';
 
 export default function RiskManagerPanel({ selectedSymbol, intelligenceData, multiTimeframeData, loading, candles }) {
@@ -147,6 +147,39 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
   const totalVol = last30Daily.reduce((sum, c) => sum + (c.volume || 0), 0);
   const adv = last30Daily.length > 0 ? totalVol / last30Daily.length : 1;
   const orderPctAdv = adv > 0 ? (sharesToBuy / adv) * 100 : 0;
+
+  // Volatility-Adjusted Average True Range (ATR) exit logic
+  const calculateATR = (candlesSeries, period = 14) => {
+    if (!candlesSeries || candlesSeries.length < period + 2) {
+      return { atr: 0, highestClose: 0 };
+    }
+    const trs = [];
+    for (let i = 1; i < candlesSeries.length; i++) {
+      const c = candlesSeries[i];
+      const prevC = candlesSeries[i - 1];
+      const hl = c.high - c.low;
+      const hc = Math.abs(c.high - (prevC.close || c.open));
+      const lc = Math.abs(c.low - (prevC.close || c.open));
+      trs.push(Math.max(hl, hc, lc));
+    }
+    const lastTRs = trs.slice(-period);
+    const atr = lastTRs.reduce((sum, tr) => sum + tr, 0) / period;
+    const lastCloses = candlesSeries.slice(-period).map(c => c.close || 0);
+    const highestClose = Math.max(...lastCloses);
+    return { atr, highestClose };
+  };
+
+  const atrMetrics = useMemo(() => {
+    return calculateATR(candles);
+  }, [candles]);
+
+  const applyVolatilityExits = () => {
+    if (atrMetrics.atr <= 0) return;
+    const volSL = entry - (2.0 * atrMetrics.atr);
+    const volTP = entry + (2.5 * atrMetrics.atr);
+    setStopLoss(Number(volSL.toFixed(1)));
+    setTarget(Number(volTP.toFixed(1)));
+  };
   
   // Parametric volatility reference
   const calcDailyVolReference = (candlesSeries) => {
@@ -733,6 +766,59 @@ export default function RiskManagerPanel({ selectedSymbol, intelligenceData, mul
                 </div>
               </div>
             </div>
+
+            {/* Volatility Exits Optimizer (ATR & Chandelier Stop) */}
+            {atrMetrics.atr > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', padding: '0.85rem', borderRadius: '12px', background: 'hsla(180, 100%, 45%, 0.02)', border: '1px solid rgba(0, 242, 254, 0.15)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Shield size={14} style={{ color: 'var(--color-accent)' }} />
+                    Volatility Exits Optimizer (14-Day ATR)
+                  </span>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--color-accent)', fontWeight: 'bold', fontFamily: 'var(--font-mono)' }}>
+                    ATR: ₹{atrMetrics.atr.toFixed(2)}
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.50rem', background: 'hsla(224, 60%, 5%, 0.4)', padding: '0.55rem', borderRadius: '8px', fontSize: '0.68rem' }}>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>ATR Stop Loss (2.0x)</span>
+                    <span style={{ fontWeight: 'bold', color: 'var(--color-bearish)' }}>₹{(entry - (2.0 * atrMetrics.atr)).toFixed(1)}</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>ATR Target (2.5x)</span>
+                    <span style={{ fontWeight: 'bold', color: 'var(--color-bullish)' }}>₹{(entry + (2.5 * atrMetrics.atr)).toFixed(1)}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dotted var(--card-border)', paddingTop: '0.45rem' }}>
+                  <div style={{ textAlign: 'left' }}>
+                    <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', display: 'block' }}>Chandelier Trailing Exit (2.5x Close)</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                      ₹{(atrMetrics.highestClose - (2.5 * atrMetrics.atr)).toFixed(1)}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={applyVolatilityExits}
+                    className="timeframe-btn"
+                    style={{ 
+                      height: '24px', 
+                      fontSize: '0.62rem', 
+                      padding: '0 0.5rem', 
+                      background: 'rgba(0, 242, 254, 0.08)', 
+                      border: '1px solid var(--color-accent)', 
+                      color: 'var(--color-accent)',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                      fontWeight: 700
+                    }}
+                  >
+                    Apply Exits
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Optimal Sizing Result */}
             <div style={{
