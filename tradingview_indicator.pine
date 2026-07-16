@@ -1,5 +1,5 @@
 //@version=6
-indicator("Aladdin Institutional AI Multi-Factor Market Intelligence Indicator", shorttitle="Aladdin AI Multi-Factor", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+indicator("Aladdin Institutional AI Multi-Factor Market Intelligence Indicator", shorttitle="Aladdin AI", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
 // =========================================================================
 // 1. INPUT PARAMETERS (USER CONFIGURATIONS)
@@ -113,7 +113,7 @@ in_session = not use_session or not na(time(timeframe.period, session_time))
 // Dynamic VWAP Bands
 var float vwap_sum = na
 var float vol_sum = na
-if (ta.change(time("D")))
+if nz(ta.change(time("D"))) != 0
     vwap_sum := 0.0
     vol_sum := 0.0
 vwap_sum := nz(vwap_sum) + (close * volume)
@@ -195,10 +195,10 @@ var box bearish_ob_box = na
 
 if (bullish_bos and show_ob)
     box.delete(bullish_ob_box)
-    bullish_ob_box := box.new(left=bar_index[5], top=high[5], right=bar_index, bottom=low[5], color=color.new(#10b981, 80), bgcolor=color.new(#10b981, 95))
+    bullish_ob_box := box.new(left=bar_index[5], top=high[5], right=bar_index, bottom=low[5], border_color=color.new(#10b981, 80), bgcolor=color.new(#10b981, 95))
 if (bearish_bos and show_ob)
     box.delete(bearish_ob_box)
-    bearish_ob_box := box.new(left=bar_index[5], top=high[5], right=bar_index, bottom=low[5], color=color.new(#ef4444, 80), bgcolor=color.new(#ef4444, 95))
+    bearish_ob_box := box.new(left=bar_index[5], top=high[5], right=bar_index, bottom=low[5], border_color=color.new(#ef4444, 80), bgcolor=color.new(#ef4444, 95))
 
 // =========================================================================
 // 7. MULTI-TIMEFRAME ANALYSIS (No-Lookahead Security)
@@ -256,20 +256,32 @@ else if (regime_type == 0) // Ranging
 
 // Scores [-100, 100]
 float t_score = 0.0
-if (close > ema_fast) t_score := t_score + 40
-if (close > sma_slow) t_score := t_score + 40
-if (slope_fast > 0)   t_score := t_score + 20
-if (close < ema_fast) t_score := t_score - 40
-if (close < sma_slow) t_score := t_score - 40
-if (slope_fast < 0)   t_score := t_score - 20
+if (close > ema_fast)
+    t_score := t_score + 40
+if (close > sma_slow)
+    t_score := t_score + 40
+if (slope_fast > 0)
+    t_score := t_score + 20
+if (close < ema_fast)
+    t_score := t_score - 40
+if (close < sma_slow)
+    t_score := t_score - 40
+if (slope_fast < 0)
+    t_score := t_score - 20
 
 float m_score = 0.0
-if (rsi_val > 50) m_score := m_score + 30
-if (macd_hist > 0) m_score := m_score + 30
-if (hist_deriv > 0) m_score := m_score + 40
-if (rsi_val < 50) m_score := m_score - 30
-if (macd_hist < 0) m_score := m_score - 30
-if (hist_deriv < 0) m_score := m_score - 40
+if (rsi_val > 50)
+    m_score := m_score + 30
+if (macd_hist > 0)
+    m_score := m_score + 30
+if (hist_deriv > 0)
+    m_score := m_score + 40
+if (rsi_val < 50)
+    m_score := m_score - 30
+if (macd_hist < 0)
+    m_score := m_score - 30
+if (hist_deriv < 0)
+    m_score := m_score - 40
 
 float v_score = is_vol_spike ? (close >= open ? 100.0 : -100.0) : (close >= open ? 40.0 : -40.0)
 float s_score = bullish_bos ? 100.0 : bearish_bos ? -100.0 : 0.0
