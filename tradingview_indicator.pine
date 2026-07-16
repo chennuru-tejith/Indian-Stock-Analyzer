@@ -440,8 +440,12 @@ if (show_dash and barstate.islast)
 plot(ema_fast, title="Fast EMA", color=color.new(#3b82f6, 0), linewidth=1)
 plot(sma_slow, title="Slow SMA", color=color.new(#f59e0b, 0), linewidth=2)
 
-plotshape(exec_buy, title="Buy Shape", style=shape.triangleup, position=position.belowbar, color=color.new(#10b981, 0), size=size.normal, text="BUY", textcolor=color.white)
-plotshape(exec_sell, title="Sell Shape", style=shape.triangledown, position=position.abovebar, color=color.new(#ef4444, 0), size=size.normal, text="SELL", textcolor=color.white)
+// Hidden plots for alert condition placeholders (Plot 2 and Plot 3)
+plot(stop_loss, title="Stop Loss Plot", display=display.none)
+plot(target_2, title="Target Plot", display=display.none)
+
+plotshape(exec_buy, title="Buy Shape", style=shape.triangleup, location=location.belowbar, color=color.new(#10b981, 0), size=size.normal, text="BUY", textcolor=color.white)
+plotshape(exec_sell, title="Sell Shape", style=shape.triangledown, location=location.abovebar, color=color.new(#ef4444, 0), size=size.normal, text="SELL", textcolor=color.white)
 
 // Highlight Candlestick Patterns
 barcolor(is_bullish_engulfing ? color.new(#10b981, 60) : is_bearish_engulfing ? color.new(#ef4444, 60) : na)
@@ -449,5 +453,11 @@ barcolor(is_bullish_engulfing ? color.new(#10b981, 60) : is_bearish_engulfing ? 
 // =========================================================================
 // 14. ALERTS CONFIGURATION
 // =========================================================================
-alertcondition(exec_buy, title="Buy Alert", message='{"event": "BUY", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}')
-alertcondition(exec_sell, title="Sell Alert", message='{"event": "SELL", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}')
+alertcondition(exec_buy, title="Buy Alert", message='{"event": "BUY", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "{{plot_2}}", "target": "{{plot_3}}"}')
+alertcondition(exec_sell, title="Sell Alert", message='{"event": "SELL", "ticker": "{{ticker}}", "price": "{{close}}", "stop": "{{plot_2}}", "target": "{{plot_3}}"}')
+
+// Modern dynamic alert calls
+if exec_buy
+    alert('{"event": "BUY", "ticker": "' + syminfo.ticker + '", "price": "' + str.tostring(close) + '", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}', alert.freq_once_per_bar_close)
+if exec_sell
+    alert('{"event": "SELL", "ticker": "' + syminfo.ticker + '", "price": "' + str.tostring(close) + '", "stop": "' + str.tostring(stop_loss) + '", "target": "' + str.tostring(target_2) + '"}', alert.freq_once_per_bar_close)
