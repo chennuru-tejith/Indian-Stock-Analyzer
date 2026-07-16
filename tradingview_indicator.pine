@@ -73,7 +73,7 @@ get_position(string pos_str) =>
         => position.top_right
 
 cell_format(table t, int col, int row, string txt, color text_c, color bg_c) =>
-    table.cell(t, col, row, txt, text_color=text_c, bgcolor=bg_c, text_size=size.small, text_align=text.align_left)
+    table.cell(t, col, row, txt, text_color=text_c, bgcolor=bg_c, text_size=size.small, text_halign=text.align_left)
 
 // =========================================================================
 // 3. CORE TECHNICAL INDICATORS
@@ -401,10 +401,10 @@ if (not rr_valid and (exec_buy or exec_sell))
 // =========================================================================
 // 12. TELEMETRY DISPLAY DASHBOARD
 // =========================================================================
-var table dash = table.new(get_position(dash_pos), 10, 10, bgcolor=color.new(#090d1a, 10), border_color=color.new(#1e293b, 0), border_width=1)
+var table dash = table.new(get_position(dash_pos), 10, 10, border_color=color.new(#1e293b, 0), border_width=1)
 
 if (show_dash and barstate.islast)
-    table.cell(dash, 0, 0, "ALADDIN AI CONFLUENCE MATRIX", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=size.normal, text_align=text.align_center)
+    table.cell(dash, 0, 0, "ALADDIN AI CONFLUENCE MATRIX", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=size.normal, text_halign=text.align_center)
     table.merge_cells(dash, 0, 0, 1, 0)
     
     cell_format(dash, 0, 1, "Market Regime", color.white, color.new(#0f172a, 0))
