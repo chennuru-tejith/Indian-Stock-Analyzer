@@ -98,6 +98,18 @@ vol_sma = ta.sma(volume, vol_ma_len)
 rvol = volume / (vol_sma > 0 ? vol_sma : 1)
 is_vol_spike = rvol >= vol_spike_m
 
+// Volume Demand Imbalance (Buy vs Sell Volume delta approximation)
+candle_range = high - low
+bull_vol_ratio = candle_range > 0 ? (close - low) / candle_range : 0.5
+buy_vol = volume * bull_vol_ratio
+sell_vol = volume * (1.0 - bull_vol_ratio)
+
+avg_buy_vol = ta.sma(buy_vol, 14)
+avg_sell_vol = ta.sma(sell_vol, 14)
+tot_vol_sum = avg_buy_vol + avg_sell_vol
+buy_pct = tot_vol_sum > 0 ? (avg_buy_vol / tot_vol_sum) * 100 : 50.0
+sell_pct = tot_vol_sum > 0 ? (avg_sell_vol / tot_vol_sum) * 100 : 50.0
+
 // Volatility & Bands
 atr = ta.atr(atr_len)
 atr_pct = (atr / close) * 100
@@ -401,7 +413,7 @@ if (not rr_valid and (exec_buy or exec_sell))
 // =========================================================================
 // 12. TELEMETRY DISPLAY DASHBOARD
 // =========================================================================
-var table dash = table.new(get_position(dash_pos), 10, 10, border_color=color.new(#1e293b, 0), border_width=1)
+var table dash = table.new(get_position(dash_pos), 10, 12, border_color=color.new(#1e293b, 0), border_width=1)
 
 if (show_dash and barstate.islast)
     table.cell(dash, 0, 0, "ALADDIN AI CONFLUENCE MATRIX", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=size.normal, text_halign=text.align_center)
@@ -419,20 +431,23 @@ if (show_dash and barstate.islast)
     cell_format(dash, 0, 4, "Participation (RVOL)", color.white, color.new(#0f172a, 0))
     cell_format(dash, 1, 4, str.tostring(rvol, "#.##") + "x", rvol >= 1.5 ? color.green : color.orange, color.new(#0f172a, 0))
     
-    cell_format(dash, 0, 5, "Structure Alignment", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 5, structure_type, color.white, color.new(#0f172a, 0))
-    
-    cell_format(dash, 0, 6, "Bullish Probability", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 6, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0))
-    
-    cell_format(dash, 0, 7, "Bearish Probability", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 7, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0))
-    
-    cell_format(dash, 0, 8, "Veto Status", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 8, veto_long or veto_short ? veto_reason : "None", veto_long or veto_short ? color.red : color.green, color.new(#0f172a, 0))
+    cell_format(dash, 0, 5, "Demand Imbalance", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 5, str.tostring(buy_pct, "#.#") + "% B / " + str.tostring(sell_pct, "#.#") + "% S", buy_pct >= 50.0 ? color.green : color.red, color.new(#0f172a, 0))
 
-    cell_format(dash, 0, 9, "Decision Output", color.white, color.new(#1e293b, 0))
-    cell_format(dash, 1, 9, signal_state, signal_state == "STRONG BUY" ? color.green : signal_state == "STRONG SELL" ? color.red : color.orange, color.new(#1e293b, 0))
+    cell_format(dash, 0, 6, "Structure Alignment", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 6, structure_type, color.white, color.new(#0f172a, 0))
+    
+    cell_format(dash, 0, 7, "Bullish Probability", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 7, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0))
+    
+    cell_format(dash, 0, 8, "Bearish Probability", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 8, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0))
+    
+    cell_format(dash, 0, 9, "Veto Status", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 9, veto_long or veto_short ? veto_reason : "None", veto_long or veto_short ? color.red : color.green, color.new(#0f172a, 0))
+
+    cell_format(dash, 0, 10, "Decision Output", color.white, color.new(#1e293b, 0))
+    cell_format(dash, 1, 10, signal_state, signal_state == "STRONG BUY" ? color.green : signal_state == "STRONG SELL" ? color.red : color.orange, color.new(#1e293b, 0))
 
 // =========================================================================
 // 13. PLOTS & DRAWINGS
