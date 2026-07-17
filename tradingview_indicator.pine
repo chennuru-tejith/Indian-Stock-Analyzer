@@ -170,29 +170,93 @@ else
 // =========================================================================
 // 5. PRICE STRUCTURE ENGINE (swing pivots, BOS, CHoCH)
 // =========================================================================
-var float last_high = na
-var float last_low = na
-var float prev_high = na
-var float prev_low = na
+// Track structural swing points
+var float swing_high = na
+var float swing_low = na
+var float prev_swing_high = na
+var float prev_swing_low = na
 
 ph = ta.pivothigh(high, pivot_len, pivot_len)
 pl = ta.pivotlow(low, pivot_len, pivot_len)
 
 if (not na(ph))
-    prev_high := last_high
-    last_high := ph
+    prev_swing_high := swing_high
+    swing_high := ph
 if (not na(pl))
-    prev_low := last_low
-    last_low := pl
+    prev_swing_low := swing_low
+    swing_low := pl
 
-string structure_type = "Neutral"
-if (not na(last_high) and not na(prev_high))
-    structure_type := last_high > prev_high ? "HH" : "LH"
-if (not na(last_low) and not na(prev_low))
-    structure_type := structure_type + (last_low > prev_low ? "/HL" : "/LL")
+// Track BOS & CHoCH states
+var bool is_bullish_trend = true
+var bool is_choch = false
+var bool is_bos = false
 
-bool bullish_bos = ta.crossover(close, last_high) and is_vol_spike
-bool bearish_bos = ta.crossunder(close, last_low) and is_vol_spike
+bool bullish_bos = false
+bool bearish_bos = false
+bool bullish_choch = false
+bool bearish_choch = false
+
+if (not na(swing_high) and not na(swing_low))
+    if (is_bullish_trend)
+        // In an uptrend, breaking the last swing high is a BOS
+        if (ta.crossover(close, swing_high))
+            bullish_bos := true
+            is_bos := true
+            is_choch := false
+        // In an uptrend, breaking the last swing low is a bearish CHoCH
+        else if (ta.crossunder(close, swing_low))
+            bearish_choch := true
+            is_bullish_trend := false
+            is_choch := true
+            is_bos := false
+    else
+        // In a downtrend, breaking the last swing low is a BOS
+        if (ta.crossunder(close, swing_low))
+            bearish_bos := true
+            is_bos := true
+            is_choch := false
+        // In a downtrend, breaking the last swing high is a bullish CHoCH
+        else if (ta.crossover(close, swing_high))
+            bullish_choch := true
+            is_bullish_trend := true
+            is_choch := true
+            is_bos := false
+
+// Construct structure brief
+string structure_brief = "Neutral Structure"
+color struct_color = color.white
+
+if (bullish_choch)
+    structure_brief := "Bullish Reversal (CHoCH)"
+    struct_color := color.green
+else if (bearish_choch)
+    structure_brief := "Bearish Reversal (CHoCH)"
+    struct_color := color.red
+else if (bullish_bos)
+    structure_brief := "Bullish Expansion (BOS)"
+    struct_color := color.green
+else if (bearish_bos)
+    structure_brief := "Bearish Expansion (BOS)"
+    struct_color := color.red
+else if (not na(swing_high) and not na(prev_swing_high) and not na(swing_low) and not na(prev_swing_low))
+    if (swing_high > prev_swing_high and swing_low > prev_swing_low)
+        structure_brief := "Bullish Trend (HH/HL)"
+        struct_color := color.green
+    else if (swing_high < prev_swing_high and swing_low < prev_swing_low)
+        structure_brief := "Bearish Trend (LH/LL)"
+        struct_color := color.red
+    else if (swing_high < prev_swing_high and swing_low > prev_swing_low)
+        structure_brief := "Symmetrical Squeeze (Inside)"
+        struct_color := color.orange
+    else if (swing_high > prev_swing_high and swing_low < prev_swing_low)
+        structure_brief := "Broadening Range"
+        struct_color := color.orange
+    else
+        structure_brief := is_bullish_trend ? "Bullish Structure" : "Bearish Structure"
+        struct_color := is_bullish_trend ? color.green : color.red
+else
+    structure_brief := "Establishing Structure"
+    struct_color := color.gray
 
 // =========================================================================
 // 6. SMART MONEY CONCEPTS (FVG & OB Detection)
@@ -435,7 +499,7 @@ if (show_dash and barstate.islast)
     cell_format(dash, 1, 5, str.tostring(buy_pct, "#.#") + "% B / " + str.tostring(sell_pct, "#.#") + "% S", buy_pct >= 50.0 ? color.green : color.red, color.new(#0f172a, 0))
 
     cell_format(dash, 0, 6, "Structure Alignment", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 6, structure_type, color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 6, structure_brief, struct_color, color.new(#0f172a, 0))
     
     cell_format(dash, 0, 7, "Bullish Probability", color.white, color.new(#0f172a, 0))
     cell_format(dash, 1, 7, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0))
