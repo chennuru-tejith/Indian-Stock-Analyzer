@@ -271,10 +271,10 @@ var box bearish_ob_box = na
 
 if (bullish_bos and show_ob)
     box.delete(bullish_ob_box)
-    bullish_ob_box := box.new(left=bar_index[5], top=high[5], right=bar_index, bottom=low[5], border_color=color.new(#10b981, 80), bgcolor=color.new(#10b981, 95))
+    bullish_ob_box := box.new(left=bar_index - 5, top=nz(high[5], high), right=bar_index, bottom=nz(low[5], low), border_color=color.new(#10b981, 80), bgcolor=color.new(#10b981, 95))
 if (bearish_bos and show_ob)
     box.delete(bearish_ob_box)
-    bearish_ob_box := box.new(left=bar_index[5], top=high[5], right=bar_index, bottom=low[5], border_color=color.new(#ef4444, 80), bgcolor=color.new(#ef4444, 95))
+    bearish_ob_box := box.new(left=bar_index - 5, top=nz(high[5], high), right=bar_index, bottom=nz(low[5], low), border_color=color.new(#ef4444, 80), bgcolor=color.new(#ef4444, 95))
 
 // =========================================================================
 // 7. MULTI-TIMEFRAME ANALYSIS (No-Lookahead Security)
@@ -453,14 +453,14 @@ var string signal_state = "Neutral"
 
 if (exec_buy)
     signal_state := "STRONG BUY"
-    stop_loss := math.min(close - (atr_stop_m * atr), nz(last_low, close * 0.95))
+    stop_loss := math.min(close - (atr_stop_m * atr), nz(swing_low, close * 0.95))
     float risk = close - stop_loss
     target_1 := close + (1.0 * risk)
     target_2 := close + (2.0 * risk)
     target_3 := close + (3.0 * risk)
 else if (exec_sell)
     signal_state := "STRONG SELL"
-    stop_loss := math.max(close + (atr_stop_m * atr), nz(last_high, close * 1.05))
+    stop_loss := math.max(close + (atr_stop_m * atr), nz(swing_high, close * 1.05))
     float risk = stop_loss - close
     target_1 := close - (1.0 * risk)
     target_2 := close - (2.0 * risk)
