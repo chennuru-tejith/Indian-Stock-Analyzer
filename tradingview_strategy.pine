@@ -75,16 +75,22 @@ trade_allowed = in_session and in_date_range
 // =========================================================================
 ema_fast = ta.ema(close, ema_fast_len)
 sma_slow = ta.sma(close, sma_slow_len)
-slope_fast = (ema_fast - ema_fast[5]) / (ta.atr(atr_len) * 5) * 100
+
+// ATR calculation first since slope needs it
+atr = ta.atr(atr_len)
+slope_fast = (ema_fast - ema_fast[5]) / (not na(atr) and atr > 0 ? atr * 5 : 1.0) * 100
+
 [di_plus, di_minus, adx_val] = ta.dmi(adx_len, adx_len)
 rsi_val = ta.rsi(close, rsi_len)
 [macd_line, macd_sig, macd_hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
 hist_deriv = macd_hist - macd_hist[1]
-vol_sma = ta.sma(volume, vol_ma_len)
-rvol = volume / (vol_sma > 0 ? vol_sma : 1)
+
+// Safe Volume (robust against symbol feeds without volume like indexes)
+src_volume = nz(volume, 0.0)
+vol_sma = ta.sma(src_volume, vol_ma_len)
+rvol = vol_sma > 0 ? src_volume / vol_sma : 0.0
 is_vol_spike = rvol >= vol_spike_m
-atr = ta.atr(atr_len)
-atr_pct = (atr / close) * 100
+atr_pct = (close > 0 and not na(atr)) ? (atr / close) * 100 : 0.0
 
 // Bollinger & Squeeze
 bb_basis = ta.sma(close, 20)
@@ -93,15 +99,9 @@ bb_upper = bb_basis + (2 * bb_dev)
 bb_lower = bb_basis - (2 * bb_dev)
 is_squeezed = bb_upper - bb_lower < 1.5 * ta.atr(20)
 
-// Dynamic VWAP Bands
-var float vwap_sum = na
-var float vol_sum = na
-if (ta.change(time("D")))
-    vwap_sum := 0.0
-    vol_sum := 0.0
-vwap_sum := nz(vwap_sum) + (close * volume)
-vol_sum := nz(vol_sum) + volume
-vwap_val = vwap_sum / (vol_sum > 0 ? vol_sum : 1)
+// Dynamic VWAP calculation with fallback for no-volume charts
+vwap_raw = ta.vwap(close)
+vwap_val = not na(vwap_raw) ? vwap_raw : ema_fast
 
 // =========================================================================
 // 4. REGIME CLASSIFICATION ENGINE
@@ -128,16 +128,57 @@ else
 // =========================================================================
 // 5. MARKET STRUCTURE & SMC ENGINE (NON-REPAINTING)
 // =========================================================================
-var float last_high = na
-var float last_low = na
+// Track structural swing points
+var float swing_high = na
+var float swing_low = na
+var float prev_swing_high = na
+var float prev_swing_low = na
+
 ph = ta.pivothigh(high, pivot_len, pivot_len)
 pl = ta.pivotlow(low, pivot_len, pivot_len)
+
 if (not na(ph))
-    last_high := ph
+    prev_swing_high := swing_high
+    swing_high := ph
 if (not na(pl))
-    last_low := pl
-bullish_bos = ta.crossover(close, last_high) and is_vol_spike
-bearish_bos = ta.crossunder(close, last_low) and is_vol_spike
+    prev_swing_low := swing_low
+    swing_low := pl
+
+// Track BOS & CHoCH states
+var bool is_bullish_trend = true
+var bool is_choch = false
+var bool is_bos = false
+
+bool bullish_bos = false
+bool bearish_bos = false
+bool bullish_choch = false
+bool bearish_choch = false
+
+if (not na(swing_high) and not na(swing_low))
+    if (is_bullish_trend)
+        // In an uptrend, breaking the last swing high is a BOS
+        if (close > swing_high and nz(close[1]) <= swing_high)
+            bullish_bos := true
+            is_bos := true
+            is_choch := false
+        // In an uptrend, breaking the last swing low is a bearish CHoCH
+        else if (close < swing_low and nz(close[1]) >= swing_low)
+            bearish_choch := true
+            is_bullish_trend := false
+            is_choch := true
+            is_bos := false
+    else
+        // In a downtrend, breaking the last swing low is a BOS
+        if (close < swing_low and nz(close[1]) >= swing_low)
+            bearish_bos := true
+            is_bos := true
+            is_choch := false
+        // In a downtrend, breaking the last swing high is a bullish CHoCH
+        else if (close > swing_high and nz(close[1]) <= swing_high)
+            bullish_choch := true
+            is_bullish_trend := true
+            is_choch := true
+            is_bos := false
 
 // Fair Value Gaps (FVG)
 bool bullish_fvg = low[0] > high[2] and (low[0] - high[2]) > (fvg_threshold * atr)
@@ -203,31 +244,40 @@ float mtf_score_val = htf_trend_bullish ? 100.0 : -100.0
 
 float final_bullish_factor = 0.0
 float final_bearish_factor = 0.0
+float active_weights_sum = 0.0
 
 if (enable_trend)
     final_bullish_factor := final_bullish_factor + (math.max(0.0, t_score) * w_trend)
     final_bearish_factor := final_bearish_factor + (math.max(0.0, -t_score) * w_trend)
+    active_weights_sum := active_weights_sum + w_trend
 if (enable_momen)
     final_bullish_factor := final_bullish_factor + (math.max(0.0, m_score) * w_momen)
     final_bearish_factor := final_bearish_factor + (math.max(0.0, -m_score) * w_momen)
+    active_weights_sum := active_weights_sum + w_momen
 if (enable_volum)
     final_bullish_factor := final_bullish_factor + (math.max(0.0, v_score) * w_volum)
     final_bearish_factor := final_bearish_factor + (math.max(0.0, -v_score) * w_volum)
+    active_weights_sum := active_weights_sum + w_volum
 if (enable_struct)
     final_bullish_factor := final_bullish_factor + (math.max(0.0, s_score) * w_struct)
     final_bearish_factor := final_bearish_factor + (math.max(0.0, -s_score) * w_struct)
+    active_weights_sum := active_weights_sum + w_struct
 if (enable_smc)
     final_bullish_factor := final_bullish_factor + (math.max(0.0, smc_score) * w_smc)
     final_bearish_factor := final_bearish_factor + (math.max(0.0, -smc_score) * w_smc)
+    active_weights_sum := active_weights_sum + w_smc
 if (enable_volat)
     final_bullish_factor := final_bullish_factor + (math.max(0.0, volatility_score) * w_volat)
     final_bearish_factor := final_bearish_factor + (math.max(0.0, -volatility_score) * w_volat)
+    active_weights_sum := active_weights_sum + w_volat
 if (enable_mtf)
     final_bullish_factor := final_bullish_factor + (math.max(0.0, mtf_score_val) * w_mtf)
     final_bearish_factor := final_bearish_factor + (math.max(0.0, -mtf_score_val) * w_mtf)
+    active_weights_sum := active_weights_sum + w_mtf
 
-int bullish_confidence = math.round(final_bullish_factor)
-int bearish_confidence = math.round(final_bearish_factor)
+float norm_factor = active_weights_sum > 0 ? active_weights_sum : 1.0
+int bullish_confidence = math.round(final_bullish_factor / norm_factor)
+int bearish_confidence = math.round(final_bearish_factor / norm_factor)
 
 // =========================================================================
 // 8. HARD VETO RULES & TRIGGER CHANNELS
@@ -271,7 +321,7 @@ var float target_level = na
 
 if (exec_buy)
     last_signal_bar := bar_index
-    stop_level := math.min(close - (atr_stop_m * atr), nz(last_low, close * 0.95))
+    stop_level := math.min(close - (atr_stop_m * atr), nz(swing_low, close * 0.95))
     float risk = close - stop_level
     target_level := close + (2.0 * risk) // TP2 Target
     
@@ -283,7 +333,7 @@ if (exec_buy)
 
 if (exec_sell)
     last_signal_bar := bar_index
-    stop_level := math.max(close + (atr_stop_m * atr), nz(last_high, close * 1.05))
+    stop_level := math.max(close + (atr_stop_m * atr), nz(swing_high, close * 1.05))
     float risk = stop_level - close
     target_level := close - (2.0 * risk) // TP2 Target
     
