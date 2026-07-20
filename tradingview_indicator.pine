@@ -559,10 +559,44 @@ if (show_dash and barstate.islast)
     cell_format(dash, 1, 10, signal_state, signal_state == "STRONG BUY" ? color.green : signal_state == "STRONG SELL" ? color.red : color.orange, color.new(#1e293b, 0))
 
 // =========================================================================
-// 13. PLOTS & DRAWINGS
+// 13. PLOTS, TARGET CHANNEL, & ACTIVE TRADE LEVELS
 // =========================================================================
+// AI Volatility-Scaled Future Target Channel (90% Confidence Band)
+float future_range = 1.65 * atr
+p_upper = plot(close + future_range, title="AI Upper Target Band", color=color.new(#14b8a6, 85))
+p_lower = plot(close - future_range, title="AI Lower Target Band", color=color.new(#14b8a6, 85))
+fill(p_upper, p_lower, color=color.new(#14b8a6, 96), title="AI Confidence Channel")
+
 plot(ema_fast, title="Fast EMA", color=color.new(#3b82f6, 0), linewidth=1)
 plot(sma_slow, title="Slow SMA", color=color.new(#f59e0b, 0), linewidth=2)
+
+// Persistent Active Trade Levels Tracking
+var float active_sl = na
+var float active_tp = na
+var int active_dir = 0
+
+if (exec_buy)
+    active_sl := stop_loss
+    active_tp := target_2
+    active_dir := 1
+else if (exec_sell)
+    active_sl := stop_loss
+    active_tp := target_2
+    active_dir := -1
+
+// Dynamic clean up of active trade levels once price crosses/touches them
+if (active_dir == 1 and (low <= active_sl or high >= active_tp))
+    active_sl := na
+    active_tp := na
+    active_dir := 0
+else if (active_dir == -1 and (high >= active_sl or low <= active_tp))
+    active_sl := na
+    active_tp := na
+    active_dir := 0
+
+// Plot visible active stop loss and target levels
+plot(active_sl, title="Active Stop Loss Line", color=color.new(color.red, 20), style=plot.style_linebr, linewidth=2)
+plot(active_tp, title="Active Target Line", color=color.new(color.green, 20), style=plot.style_linebr, linewidth=2)
 
 // Hidden plots for alert condition placeholders (Plot 2 and Plot 3)
 plot(stop_loss, title="Stop Loss Plot", display=display.none)
