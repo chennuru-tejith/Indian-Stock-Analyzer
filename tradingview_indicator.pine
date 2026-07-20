@@ -573,29 +573,49 @@ plot(sma_slow, title="Slow SMA", color=color.new(#f59e0b, 0), linewidth=2)
 // Persistent Active Trade Levels Tracking
 var float active_sl = na
 var float active_tp = na
+var float active_entry = na
 var int active_dir = 0
 
 if (exec_buy)
     active_sl := stop_loss
     active_tp := target_2
+    active_entry := close
     active_dir := 1
+    // Create visual label on the chart detailing exact trade numbers
+    label.new(bar_index, low - (atr * 0.75), 
+              text="🟢 BUY ENTRY: " + str.tostring(close, "#.##") + "\n🛑 SL: " + str.tostring(stop_loss, "#.##") + "\n🎯 TP: " + str.tostring(target_2, "#.##"), 
+              color=color.new(#10b981, 10), 
+              textcolor=color.white, 
+              style=label.style_label_up, 
+              size=size.small)
 else if (exec_sell)
     active_sl := stop_loss
     active_tp := target_2
+    active_entry := close
     active_dir := -1
+    // Create visual label on the chart detailing exact trade numbers
+    label.new(bar_index, high + (atr * 0.75), 
+              text="🔴 SELL ENTRY: " + str.tostring(close, "#.##") + "\n🛑 SL: " + str.tostring(stop_loss, "#.##") + "\n🎯 TP: " + str.tostring(target_2, "#.##"), 
+              color=color.new(#ef4444, 10), 
+              textcolor=color.white, 
+              style=label.style_label_down, 
+              size=size.small)
 
 // Dynamic clean up of active trade levels once price crosses/touches them
 if (active_dir == 1 and (low <= active_sl or high >= active_tp))
     active_sl := na
     active_tp := na
+    active_entry := na
     active_dir := 0
 else if (active_dir == -1 and (high >= active_sl or low <= active_tp))
     active_sl := na
     active_tp := na
+    active_entry := na
     active_dir := 0
 
-// Plot visible active stop loss and target levels
+// Plot visible active stop loss, entry and target levels
 plot(active_sl, title="Active Stop Loss Line", color=color.new(color.red, 20), style=plot.style_linebr, linewidth=2)
+plot(active_entry, title="Active Entry Line", color=color.new(color.blue, 20), style=plot.style_linebr, linewidth=2)
 plot(active_tp, title="Active Target Line", color=color.new(color.green, 20), style=plot.style_linebr, linewidth=2)
 
 // Hidden plots for alert condition placeholders (Plot 2 and Plot 3)
