@@ -75,6 +75,14 @@ get_position(string pos_str) =>
 cell_format(table t, int col, int row, string txt, color text_c, color bg_c) =>
     table.cell(t, col, row, txt, text_color=text_c, bgcolor=bg_c, text_size=size.small, text_halign=text.align_left)
 
+format_vol(float vol) =>
+    if vol >= 1000000
+        str.tostring(vol / 1000000, "#.#") + "M"
+    else if vol >= 1000
+        str.tostring(vol / 1000, "#.#") + "K"
+    else
+        str.tostring(vol, "#")
+
 // =========================================================================
 // 3. CORE TECHNICAL INDICATORS
 // =========================================================================
@@ -480,10 +488,41 @@ if (not rr_valid and (exec_buy or exec_sell))
     exec_sell := false
     signal_state := "NEUTRAL (R:R Rejected)"
 
+// Construct dynamic market brief
+string market_brief = "Establishing Structure"
+color brief_color = color.white
+
+if (regime_type == 3)
+    market_brief := "High Volatility / Danger Area"
+    brief_color := color.red
+else if (regime_type == 2)
+    market_brief := "Squeeze / Breakout Imminent"
+    brief_color := color.orange
+else if (regime_type == 1) // Trending
+    if (t_score > 50)
+        market_brief := bullish_choch ? "Bullish Shift (CHoCH)" : bullish_bos ? "Bullish Breakout (BOS)" : "Bullish Expansion"
+        brief_color := color.green
+    else if (t_score < -50)
+        market_brief := bearish_choch ? "Bearish Shift (CHoCH)" : bearish_bos ? "Bearish Breakdown (BOS)" : "Bearish Expansion"
+        brief_color := color.red
+    else
+        market_brief := "Trend Transition Phase"
+        brief_color := color.orange
+else // Ranging
+    if (rsi_val > 65)
+        market_brief := "Overextended Range High"
+        brief_color := color.orange
+    else if (rsi_val < 35)
+        market_brief := "Overextended Range Low"
+        brief_color := color.orange
+    else
+        market_brief := "Neutral Consolidation Area"
+        brief_color := color.white
+
 // =========================================================================
 // 12. TELEMETRY DISPLAY DASHBOARD
 // =========================================================================
-var table dash = table.new(get_position(dash_pos), 10, 12, border_color=color.new(#1e293b, 0), border_width=1)
+var table dash = table.new(get_position(dash_pos), 10, 11, border_color=color.new(#1e293b, 0), border_width=1)
 
 if (show_dash and barstate.islast)
     table.cell(dash, 0, 0, "ALADDIN AI CONFLUENCE MATRIX", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=size.normal, text_halign=text.align_center)
@@ -502,20 +541,20 @@ if (show_dash and barstate.islast)
     cell_format(dash, 1, 4, str.tostring(rvol, "#.##") + "x", rvol >= 1.5 ? color.green : color.orange, color.new(#0f172a, 0))
     
     cell_format(dash, 0, 5, "Demand Imbalance", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 5, str.tostring(buy_pct, "#.#") + "% B / " + str.tostring(sell_pct, "#.#") + "% S", buy_pct >= 50.0 ? color.green : color.red, color.new(#0f172a, 0))
+    cell_format(dash, 1, 5, str.tostring(buy_pct, "#.0") + "% (" + format_vol(avg_buy_vol) + " B) / " + str.tostring(sell_pct, "#.0") + "% (" + format_vol(avg_sell_vol) + " S)", buy_pct >= 50.0 ? color.green : color.red, color.new(#0f172a, 0))
 
     cell_format(dash, 0, 6, "Structure Alignment", color.white, color.new(#0f172a, 0))
     cell_format(dash, 1, 6, structure_brief, struct_color, color.new(#0f172a, 0))
     
-    cell_format(dash, 0, 7, "Bullish Probability", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 7, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0))
-    
-    cell_format(dash, 0, 8, "Bearish Probability", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 8, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0))
-    
-    cell_format(dash, 0, 9, "Veto Status", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 9, veto_long or veto_short ? veto_reason : "None", veto_long or veto_short ? color.red : color.green, color.new(#0f172a, 0))
+    cell_format(dash, 0, 7, "Market Brief", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 7, market_brief, brief_color, color.new(#0f172a, 0))
 
+    cell_format(dash, 0, 8, "Bullish Probability", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 8, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0))
+    
+    cell_format(dash, 0, 9, "Bearish Probability", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 9, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0))
+    
     cell_format(dash, 0, 10, "Decision Output", color.white, color.new(#1e293b, 0))
     cell_format(dash, 1, 10, signal_state, signal_state == "STRONG BUY" ? color.green : signal_state == "STRONG SELL" ? color.red : color.orange, color.new(#1e293b, 0))
 
