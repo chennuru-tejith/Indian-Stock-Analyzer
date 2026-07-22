@@ -184,11 +184,16 @@ if (not na(swing_high) and not na(swing_low))
 bool bullish_fvg = low[0] > high[2] and (low[0] - high[2]) > (fvg_threshold * atr)
 bool bearish_fvg = high[0] < low[2] and (low[2] - high[0]) > (fvg_threshold * atr)
 
+// Institutional Liquidity Sweeps (Stop Hunts)
+bool bull_liquidity_sweep = not na(swing_low) and low < swing_low and close > swing_low
+bool bear_liquidity_sweep = not na(swing_high) and high > swing_high and close < swing_high
+
 // =========================================================================
 // 6. MULTI-TIMEFRAME ENGINE (NO LOOKAHEAD SECURITY)
 // =========================================================================
 htf_ema_fast = request.security(syminfo.tickerid, htf_res, ta.ema(close, ema_fast_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
 htf_sma_slow = request.security(syminfo.tickerid, htf_res, ta.sma(close, sma_slow_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
+htf_rsi      = request.security(syminfo.tickerid, htf_res, ta.rsi(close, 14)[1], barmerge.gaps_off, barmerge.lookahead_off)
 htf_trend_bullish = htf_ema_fast > htf_sma_slow
 
 // =========================================================================
@@ -238,9 +243,23 @@ if (hist_deriv < 0) m_score := m_score - 40
 
 float v_score = is_vol_spike ? (close >= open ? 100.0 : -100.0) : (close >= open ? 40.0 : -40.0)
 float s_score = bullish_bos ? 100.0 : bearish_bos ? -100.0 : 0.0
-float smc_score = bullish_fvg ? 100.0 : bearish_fvg ? -100.0 : 0.0
+
+// Institutional SMC & Liquidity Sweep Scoring
+float smc_score = 0.0
+if (bullish_fvg) smc_score := smc_score + 50.0
+if (bearish_fvg) smc_score := smc_score - 50.0
+if (bull_liquidity_sweep) smc_score := smc_score + 50.0
+if (bear_liquidity_sweep) smc_score := smc_score - 50.0
+
 float volatility_score = is_squeezed ? 50.0 : 0.0
-float mtf_score_val = htf_trend_bullish ? 100.0 : -100.0
+
+// Multi-Timeframe Score with HTF RSI Bias
+float mtf_score_val = 0.0
+if (htf_trend_bullish) mtf_score_val := mtf_score_val + 60.0
+else mtf_score_val := mtf_score_val - 60.0
+
+if (not na(htf_rsi) and htf_rsi > 50) mtf_score_val := mtf_score_val + 40.0
+else if (not na(htf_rsi) and htf_rsi < 50) mtf_score_val := mtf_score_val - 40.0
 
 float final_bullish_factor = 0.0
 float final_bearish_factor = 0.0

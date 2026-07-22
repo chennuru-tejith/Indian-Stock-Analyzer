@@ -5,22 +5,28 @@ import { yahooFinance } from './dataService.js';
 // Cache results file path
 const RESULTS_CACHE_PATH = path.join(process.cwd(), 'scratch', 'daily_screener_results.json');
 
-// Default target screening symbols (Major liquid Nifty equities representing multiple sectors)
+// Categorized screening symbols
+export const LARGE_CAP_SYMBOLS = [
+  'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'ICICIBANK.NS',
+  'SBIN.NS', 'BHARTIARTL.NS', 'ITC.NS', 'LT.NS', 'HINDUNILVR.NS',
+  'KOTAKBANK.NS', 'AXISBANK.NS', 'TATASTEEL.NS', 'WIPRO.NS'
+];
+
+export const MID_CAP_SYMBOLS = [
+  'TATAPOWER.NS', 'FEDERALBANK.NS', 'IDFCFIRSTB.NS', 'SAIL.NS',
+  'ASHOKLEY.NS', 'REC.NS', 'PFC.NS', 'NHPC.NS', 'GMRINFRA.NS',
+  'IRFC.NS', 'HUDCO.NS'
+];
+
+export const PENNY_SYMBOLS = [
+  'SUZLON.NS', 'IDEA.NS', 'YESBANK.NS', 'JPPOWER.NS', 'SOUTHBANK.NS',
+  'ALOKTEXT.NS', 'RPOWER.NS', 'GTLINFRA.NS', 'URJA.NS'
+];
+
 const DEFAULT_SYMBOLS = [
-  'RELIANCE.NS', // Energy / Conglomerate
-  'TCS.NS',      // IT Services
-  'HDFCBANK.NS', // Banking
-  'INFY.NS',     // IT Services
-  'ICICIBANK.NS',// Banking
-  'SBIN.NS',     // Banking (Public Sector)
-  'BHARTIARTL.NS',// Telecom
-  'ITC.NS',      // FMCG
-  'LT.NS',       // Capital Goods / Infrastructure
-  'HINDUNILVR.NS',// FMCG
-  'KOTAKBANK.NS',// Banking
-  'AXISBANK.NS', // Banking
-  'TATASTEEL.NS',// Metals & Mining
-  'WIPRO.NS'     // IT Services
+  ...LARGE_CAP_SYMBOLS,
+  ...MID_CAP_SYMBOLS,
+  ...PENNY_SYMBOLS
 ];
 
 /**
@@ -103,9 +109,12 @@ export async function runFundamentalScreener(symbols = DEFAULT_SYMBOLS) {
       else if (fundamentalScore >= 60) grade = 'FULLY VALUED / ALREADY PRICED IN';
       else grade = 'UNDERPERFORMING / WEAK FUNDAMENTALS';
 
+      const category = PENNY_SYMBOLS.includes(sym) ? 'Penny' : MID_CAP_SYMBOLS.includes(sym) ? 'Medium' : 'Large';
+
       return {
         symbol: sym,
         success: true,
+        category,
         currentPrice,
         pe: Number(pe.toFixed(1)),
         pb: Number(pb.toFixed(2)),
