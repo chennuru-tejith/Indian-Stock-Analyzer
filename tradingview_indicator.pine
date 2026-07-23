@@ -292,11 +292,13 @@ if (slope_fast < 0)   t_score := t_score - 20
 // Momentum Score
 float m_score = 0.0
 if (rsi_val > 50) m_score := m_score + 30
-if (macd_hist > 0) m_score := m_score + 30
-if (hist_deriv > 0) m_score := m_score + 40
+if (rsi_val <= rsi_os) m_score := m_score + 20
+if (rsi_val >= rsi_ob) m_score := m_score - 20
+if (macd_hist > 0) m_score := m_score + 25
+if (hist_deriv > 0) m_score := m_score + 25
 if (rsi_val < 50) m_score := m_score - 30
-if (macd_hist < 0) m_score := m_score - 30
-if (hist_deriv < 0) m_score := m_score - 40
+if (macd_hist < 0) m_score := m_score - 25
+if (hist_deriv < 0) m_score := m_score - 25
 
 // Participation / VWAP Score
 float v_score = 0.0
