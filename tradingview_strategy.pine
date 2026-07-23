@@ -1,17 +1,22 @@
 //@version=6
-strategy("Aladdin Institutional Multi-Factor Strategy Companion", shorttitle="Aladdin Strategy", overlay=true, initial_capital=100000, default_qty_type=strategy.percent_of_equity, default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.03, slippage=2, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+strategy("Aladdin Institutional F&O Broker Strategy Companion", shorttitle="Aladdin F&O Strategy", overlay=true, initial_capital=100000, default_qty_type=strategy.percent_of_equity, default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.03, slippage=2, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
 // =========================================================================
-// 1. INPUT PARAMETERS (USER CONTROLS)
+// 1. INPUT PARAMETERS (F&O STRATEGY CONTROLS)
 // =========================================================================
 gp_mode      = "SYSTEM OPERATING MODE"
 sys_mode     = input.string("BALANCED", title="Operating Mode", options=["CONSERVATIVE", "BALANCED", "AGGRESSIVE"], group=gp_mode)
 min_rr       = input.float(1.5, title="Minimum Reward-to-Risk Ratio", step=0.1, group=gp_mode)
 
+gp_fo        = "F&O BROKER RULES (NIFTY / BANKNIFTY)"
+strike_step_in = input.int(50, title="Option Strike Step (Nifty: 50, BankNifty: 100)", group=gp_fo)
+show_cpr     = input.bool(true, title="Show Daily Central Pivot Range (CPR)", group=gp_fo)
+show_pdh_pdl = input.bool(true, title="Show Previous Day High / Low (PDH/PDL)", group=gp_fo)
+
 gp_modules   = "MODULE TOGGLES"
 enable_trend = input.bool(true, title="Enable Trend Engine", group=gp_modules)
 enable_momen = input.bool(true, title="Enable Momentum Engine", group=gp_modules)
-enable_volum = input.bool(true, title="Enable Volume Engine", group=gp_modules)
+enable_volum = input.bool(true, title="Enable Participation Engine", group=gp_modules)
 enable_struct= input.bool(true, title="Enable Structure Engine", group=gp_modules)
 enable_smc   = input.bool(true, title="Enable Smart Money Concepts", group=gp_modules)
 enable_volat = input.bool(true, title="Enable Volatility Engine", group=gp_modules)
@@ -20,7 +25,7 @@ enable_mtf   = input.bool(true, title="Enable Multi-Timeframe Alignment", group=
 gp_trend     = "A. TREND QUALITY SETTINGS"
 ema_fast_len = input.int(20, title="Fast EMA Length", minval=5, group=gp_trend)
 sma_slow_len = input.int(200, title="Slow SMA Length", minval=50, group=gp_trend)
-adx_len      = input.int(14, title="ADX Smoothing Period", group=gp_trend)
+adx_len      = input.int(14, title="ADX Period", group=gp_trend)
 adx_limit    = input.int(20, title="Trend Strength Threshold", group=gp_trend)
 
 gp_momentum  = "B. MOMENTUM QUALITY SETTINGS"
@@ -31,31 +36,24 @@ macd_fast    = input.int(12, title="MACD Fast Period", group=gp_momentum)
 macd_slow    = input.int(26, title="MACD Slow Period", group=gp_momentum)
 macd_signal  = input.int(9, title="MACD Signal Period", group=gp_momentum)
 
-gp_volume    = "C. VOLUME & PARTICIPATION"
-vol_ma_len   = input.int(20, title="Volume SMA Period", group=gp_volume)
-vol_spike_m  = input.float(1.5, title="Volume Spike Threshold Multiplier", step=0.1, group=gp_volume)
-
-gp_structure = "D. MARKET STRUCTURE"
+gp_structure = "C. MARKET STRUCTURE"
 pivot_len    = input.int(5, title="Pivot Point Lookback", minval=2, group=gp_structure)
 
-gp_smc       = "E. SMART MONEY CONCEPTS"
+gp_smc       = "D. SMART MONEY CONCEPTS"
 fvg_threshold= input.float(0.1, title="FVG Min Height (ATR Ratio)", step=0.05, group=gp_smc)
 
-gp_location  = "F. FAIR VALUE LOCATION"
-vwap_dev_mult= input.float(2.0, title="VWAP Standard Dev Multiplier", step=0.5, group=gp_location)
-
-gp_volatility= "G. VOLATILITY ENGINE"
+gp_volatility= "E. VOLATILITY ENGINE"
 atr_len      = input.int(14, title="ATR Length", group=gp_volatility)
 atr_stop_m   = input.float(2.0, title="ATR Stop Loss Multiplier", step=0.1, group=gp_volatility)
 
-gp_mtf       = "H. MULTI-TIMEFRAME ALIGNMENT"
+gp_mtf       = "F. MULTI-TIMEFRAME ALIGNMENT"
 htf_res      = input.timeframe("240", title="Higher Timeframe", group=gp_mtf)
 
-gp_session   = "I. SESSION & FILTER RULES"
+gp_session   = "G. SESSION & FILTER RULES"
 use_session  = input.bool(false, title="Restrict Trading to Session", group=gp_session)
-session_time = input.session("0915-1530:23456", title="Active Trading Session (IST Default)", group=gp_session)
+session_time = input.session("0915-1530:23456", title="Active Trading Session", group=gp_session)
 
-gp_dates     = "J. BACKTEST DATE RANGE"
+gp_dates     = "H. BACKTEST DATE RANGE"
 start_year   = input.int(2020, title="Start Year", group=gp_dates)
 start_month  = input.int(1, title="Start Month", group=gp_dates)
 start_day    = input.int(1, title="Start Day", group=gp_dates)
@@ -70,14 +68,37 @@ in_session = not use_session or not na(time(timeframe.period, session_time))
 in_date_range = time >= timestamp(start_year, start_month, start_day, 0, 0) and time <= timestamp(end_year, end_month, end_day, 23, 59)
 trade_allowed = in_session and in_date_range
 
+// Auto Option Strike Step Calculation
+strike_step = str.contains(syminfo.ticker, "BANKNIFTY") ? 100 : strike_step_in
+atm_strike  = math.round(close / strike_step) * strike_step
+
 // =========================================================================
-// 3. CORE TECHNICAL INDICATORS (CURRENT TIMEFRAME)
+// 3. CORE F&O ENGINE & CPR CALCULATIONS
+// =========================================================================
+pdh = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
+pdl = request.security(syminfo.tickerid, "D", low[1], lookahead=barmerge.lookahead_on)
+pdc = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
+
+pivot_p  = (pdh + pdl + pdc) / 3.0
+pivot_bc = (pdh + pdl) / 2.0
+pivot_tc = (2.0 * pivot_p) - pivot_bc
+
+cpr_top    = math.max(pivot_tc, pivot_bc)
+cpr_bottom = math.min(pivot_tc, pivot_bc)
+
+plot(show_cpr ? pivot_p : na, title="CPR Pivot (P)", color=color.new(#a855f7, 20), linewidth=2)
+plot(show_cpr ? cpr_top : na, title="CPR Top (TC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
+plot(show_cpr ? cpr_bottom : na, title="CPR Bottom (BC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
+
+plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#ef4444, 30), linewidth=1, style=plot.style_dashed)
+plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_dashed)
+
+// =========================================================================
+// 4. CORE TECHNICAL INDICATORS & AUTO INDEX VOLUME COMPENSATION
 // =========================================================================
 ema_fast = ta.ema(close, ema_fast_len)
 sma_slow = ta.sma(close, sma_slow_len)
-
-// ATR calculation first since slope needs it
-atr = ta.atr(atr_len)
+atr      = ta.atr(atr_len)
 slope_fast = (ema_fast - ema_fast[5]) / (not na(atr) and atr > 0 ? atr * 5 : 1.0) * 100
 
 [di_plus, di_minus, adx_val] = ta.dmi(adx_len, adx_len)
@@ -85,111 +106,72 @@ rsi_val = ta.rsi(close, rsi_len)
 [macd_line, macd_sig, macd_hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
 hist_deriv = macd_hist - macd_hist[1]
 
-// Safe Volume (robust against symbol feeds without volume like indexes)
-src_volume = nz(volume, 0.0)
-vol_sma = ta.sma(src_volume, vol_ma_len)
-rvol = vol_sma > 0 ? src_volume / vol_sma : 0.0
-is_vol_spike = rvol >= vol_spike_m
-atr_pct = (close > 0 and not na(atr)) ? (atr / close) * 100 : 0.0
+src_volume   = nz(volume, 0.0)
+is_index     = syminfo.type == "index" or str.contains(syminfo.ticker, "NIFTY") or src_volume == 0
+vol_sma      = ta.sma(src_volume, 20)
+rvol         = (vol_sma > 0) ? src_volume / vol_sma : 1.0
+is_vol_spike = is_index ? true : rvol >= 1.5
 
-// Bollinger & Squeeze
+vwap_raw = ta.vwap(close)
+vwap_val = not na(vwap_raw) ? vwap_raw : ema_fast
+vwap_stdev = ta.stdev(close, 20)
+vwap_upper_2 = vwap_val + (2.0 * vwap_stdev)
+vwap_lower_2 = vwap_val - (2.0 * vwap_stdev)
+
+atr_pct = (close > 0 and not na(atr)) ? (atr / close) * 100 : 0.0
 bb_basis = ta.sma(close, 20)
 bb_dev = ta.stdev(close, 20)
 bb_upper = bb_basis + (2 * bb_dev)
 bb_lower = bb_basis - (2 * bb_dev)
 is_squeezed = bb_upper - bb_lower < 1.5 * ta.atr(20)
 
-// Dynamic VWAP calculation with fallback for no-volume charts
-vwap_raw = ta.vwap(close)
-vwap_val = not na(vwap_raw) ? vwap_raw : ema_fast
-
-// =========================================================================
-// 4. REGIME CLASSIFICATION ENGINE
-// =========================================================================
 eff_num = math.abs(close - close[10])
 eff_denom = 0.0
 for i = 0 to 9
     eff_denom := eff_denom + math.abs(close[i] - close[i+1])
 price_efficiency = eff_denom > 0 ? eff_num / eff_denom : 1.0
 
-int regime_type = 0 // 0 = Sideways, 1 = Trending, 2 = Breakout, 3 = Volatile
+int regime_type = 0
 is_trending = adx_val >= adx_limit and price_efficiency >= 0.45
 is_volatile = atr_pct >= ta.sma(atr_pct, 100) * 1.5
 
-if (is_volatile)
-    regime_type := 3
-else if (is_squeezed)
-    regime_type := 2
-else if (is_trending)
-    regime_type := 1
-else
-    regime_type := 0
+if (is_volatile) regime_type := 3
+else if (is_squeezed) regime_type := 2
+else if (is_trending) regime_type := 1
+else regime_type := 0
 
 // =========================================================================
-// 5. MARKET STRUCTURE & SMC ENGINE (NON-REPAINTING)
+// 5. PRICE STRUCTURE & SMART MONEY CONCEPTS
 // =========================================================================
-// Track structural swing points
 var float swing_high = na
 var float swing_low = na
-var float prev_swing_high = na
-var float prev_swing_low = na
 
 ph = ta.pivothigh(high, pivot_len, pivot_len)
 pl = ta.pivotlow(low, pivot_len, pivot_len)
 
-if (not na(ph))
-    prev_swing_high := swing_high
-    swing_high := ph
-if (not na(pl))
-    prev_swing_low := swing_low
-    swing_low := pl
+if (not na(ph)) swing_high := ph
+if (not na(pl)) swing_low := pl
 
-// Track BOS & CHoCH states
 var bool is_bullish_trend = true
-var bool is_choch = false
-var bool is_bos = false
-
 bool bullish_bos = false
 bool bearish_bos = false
-bool bullish_choch = false
-bool bearish_choch = false
 
 if (not na(swing_high) and not na(swing_low))
     if (is_bullish_trend)
-        // In an uptrend, breaking the last swing high is a BOS
-        if (close > swing_high and nz(close[1]) <= swing_high)
-            bullish_bos := true
-            is_bos := true
-            is_choch := false
-        // In an uptrend, breaking the last swing low is a bearish CHoCH
-        else if (close < swing_low and nz(close[1]) >= swing_low)
-            bearish_choch := true
-            is_bullish_trend := false
-            is_choch := true
-            is_bos := false
+        if (close > swing_high and nz(close[1]) <= swing_high) bullish_bos := true
+        else if (close < swing_low and nz(close[1]) >= swing_low) is_bullish_trend := false
     else
-        // In a downtrend, breaking the last swing low is a BOS
-        if (close < swing_low and nz(close[1]) >= swing_low)
-            bearish_bos := true
-            is_bos := true
-            is_choch := false
-        // In a downtrend, breaking the last swing high is a bullish CHoCH
-        else if (close > swing_high and nz(close[1]) <= swing_high)
-            bullish_choch := true
-            is_bullish_trend := true
-            is_choch := true
-            is_bos := false
+        if (close < swing_low and nz(close[1]) >= swing_low) bearish_bos := true
+        else if (close > swing_high and nz(close[1]) <= swing_high) is_bullish_trend := true
 
-// Fair Value Gaps (FVG)
 bool bullish_fvg = low[0] > high[2] and (low[0] - high[2]) > (fvg_threshold * atr)
 bool bearish_fvg = high[0] < low[2] and (low[2] - high[0]) > (fvg_threshold * atr)
 
-// Institutional Liquidity Sweeps (Stop Hunts)
-bool bull_liquidity_sweep = not na(swing_low) and low < swing_low and close > swing_low
-bool bear_liquidity_sweep = not na(swing_high) and high > swing_high and close < swing_high
+bool bull_liquidity_sweep = (not na(swing_low) and low < swing_low and close > swing_low) or (low < pdl and close > pdl)
+bool bear_liquidity_sweep = (not na(swing_high) and high > swing_high and close < swing_high) or (high > pdh and close < pdh)
 
 // =========================================================================
-// 6. MULTI-TIMEFRAME ENGINE (NO LOOKAHEAD SECURITY)
+// 6. MULTI-TIMEFRAME ANALYSIS
 // =========================================================================
 htf_ema_fast = request.security(syminfo.tickerid, htf_res, ta.ema(close, ema_fast_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
 htf_sma_slow = request.security(syminfo.tickerid, htf_res, ta.sma(close, sma_slow_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
@@ -199,32 +181,14 @@ htf_trend_bullish = htf_ema_fast > htf_sma_slow
 // =========================================================================
 // 7. COMPOSITE SCORING MODEL
 // =========================================================================
-float w_trend  = 0.20
-float w_momen  = 0.15
-float w_volum  = 0.15
+float w_trend  = 0.25
+float w_momen  = 0.20
+float w_volum  = is_index ? 0.05 : 0.15
 float w_struct = 0.20
 float w_smc    = 0.15
-float w_volat  = 0.10
-float w_mtf    = 0.05
+float w_volat  = 0.05
+float w_mtf    = 0.10
 
-if (regime_type == 1) // Trending
-    w_trend  := 0.30
-    w_struct := 0.20
-    w_mtf    := 0.10
-    w_momen  := 0.10
-    w_volum  := 0.10
-    w_smc    := 0.15
-    w_volat  := 0.05
-else if (regime_type == 0) // Ranging
-    w_momen  := 0.25
-    w_smc    := 0.20
-    w_trend  := 0.05
-    w_struct := 0.10
-    w_volat  := 0.15
-    w_volum  := 0.10
-    w_mtf    := 0.15
-
-// Factors Scoring
 float t_score = 0.0
 if (close > ema_fast) t_score := t_score + 40
 if (close > sma_slow) t_score := t_score + 40
@@ -241,10 +205,14 @@ if (rsi_val < 50) m_score := m_score - 30
 if (macd_hist < 0) m_score := m_score - 30
 if (hist_deriv < 0) m_score := m_score - 40
 
-float v_score = is_vol_spike ? (close >= open ? 100.0 : -100.0) : (close >= open ? 40.0 : -40.0)
+float v_score = 0.0
+if (close > vwap_val) v_score := v_score + 50
+else v_score := v_score - 50
+if (close > cpr_top) v_score := v_score + 50
+else if (close < cpr_bottom) v_score := v_score - 50
+
 float s_score = bullish_bos ? 100.0 : bearish_bos ? -100.0 : 0.0
 
-// Institutional SMC & Liquidity Sweep Scoring
 float smc_score = 0.0
 if (bullish_fvg) smc_score := smc_score + 50.0
 if (bearish_fvg) smc_score := smc_score - 50.0
@@ -253,11 +221,9 @@ if (bear_liquidity_sweep) smc_score := smc_score - 50.0
 
 float volatility_score = is_squeezed ? 50.0 : 0.0
 
-// Multi-Timeframe Score with HTF RSI Bias
 float mtf_score_val = 0.0
 if (htf_trend_bullish) mtf_score_val := mtf_score_val + 60.0
 else mtf_score_val := mtf_score_val - 60.0
-
 if (not na(htf_rsi) and htf_rsi > 50) mtf_score_val := mtf_score_val + 40.0
 else if (not na(htf_rsi) and htf_rsi < 50) mtf_score_val := mtf_score_val - 40.0
 
@@ -299,121 +265,60 @@ int bullish_confidence = math.round(final_bullish_factor / norm_factor)
 int bearish_confidence = math.round(final_bearish_factor / norm_factor)
 
 // =========================================================================
-// 8. HARD VETO RULES & TRIGGER CHANNELS
+// 8. STRATEGY EXECUTION ENGINE
 // =========================================================================
-bool veto_long = false
-bool veto_short = false
-float overextension_limit = sys_mode == "CONSERVATIVE" ? 1.5 : sys_mode == "BALANCED" ? 2.25 : 3.0
-
-if (not htf_trend_bullish and sys_mode == "CONSERVATIVE")
-    veto_long := true
-if (close > vwap_val + (overextension_limit * atr))
-    veto_long := true
-if (regime_type == 3)
-    veto_long := true
-
-if (htf_trend_bullish and sys_mode == "CONSERVATIVE")
-    veto_short := true
-if (close < vwap_val - (overextension_limit * atr))
-    veto_short := true
-if (regime_type == 3)
-    veto_short := true
-
 int buy_threshold = sys_mode == "CONSERVATIVE" ? 75 : sys_mode == "BALANCED" ? 65 : 55
 int sell_threshold = sys_mode == "CONSERVATIVE" ? 75 : sys_mode == "BALANCED" ? 65 : 55
 
-bool buy_trigger = bullish_confidence >= buy_threshold and not veto_long and trade_allowed
-bool sell_trigger = bearish_confidence >= sell_threshold and not veto_short and trade_allowed
+bool veto_long = close > vwap_upper_2 or regime_type == 3
+bool veto_short = close < vwap_lower_2 or regime_type == 3
 
-// Signal Cooldown
-var int last_signal_bar = 0
-bool cooldown_ok = (bar_index - last_signal_bar) >= 5
+bool buy_signal = bullish_confidence >= buy_threshold and not veto_long and trade_allowed and barstate.isconfirmed
+bool sell_signal = bearish_confidence >= sell_threshold and not veto_short and trade_allowed and barstate.isconfirmed
 
-bool exec_buy = buy_trigger and cooldown_ok and strategy.position_size == 0
-bool exec_sell = sell_trigger and cooldown_ok and strategy.position_size == 0
+var float long_stop = na
+var float long_tp = na
+var float short_stop = na
+var float short_tp = na
 
-// =========================================================================
-// 9. STRATEGY EXECUTION ENGINE
-// =========================================================================
-var float stop_level = na
-var float target_level = na
+if (buy_signal and strategy.position_size == 0)
+    long_stop := math.min(close - (atr_stop_m * atr), nz(swing_low, close * 0.99))
+    float risk = close - long_stop
+    long_tp := close + (2.0 * risk)
+    if ((long_tp - close) / risk >= min_rr)
+        strategy.entry("BUY CE (" + str.tostring(atm_strike) + ")", strategy.long)
+        strategy.exit("Exit BUY CE", "BUY CE (" + str.tostring(atm_strike) + ")", stop=long_stop, limit=long_tp)
 
-if (exec_buy)
-    last_signal_bar := bar_index
-    stop_level := math.min(close - (atr_stop_m * atr), nz(swing_low, close * 0.95))
-    float risk = close - stop_level
-    target_level := close + (2.0 * risk) // TP2 Target
-    
-    // R:R Filter
-    float est_rr = risk != 0 ? (target_level - close) / risk : 0.0
-    if (est_rr >= min_rr)
-        strategy.entry("Long", strategy.long)
-        strategy.exit("Exit Long", "Long", stop=stop_level, limit=target_level)
+if (sell_signal and strategy.position_size == 0)
+    short_stop := math.max(close + (atr_stop_m * atr), nz(swing_high, close * 1.01))
+    float risk = short_stop - close
+    short_tp := close - (2.0 * risk)
+    if ((close - short_tp) / risk >= min_rr)
+        strategy.entry("BUY PE (" + str.tostring(atm_strike) + ")", strategy.short)
+        strategy.exit("Exit BUY PE", "BUY PE (" + str.tostring(atm_strike) + ")", stop=short_stop, limit=short_tp)
 
-if (exec_sell)
-    last_signal_bar := bar_index
-    stop_level := math.max(close + (atr_stop_m * atr), nz(swing_high, close * 1.05))
-    float risk = stop_level - close
-    target_level := close - (2.0 * risk) // TP2 Target
-    
-    // R:R Filter
-    float est_rr = risk != 0 ? (close - target_level) / risk : 0.0
-    if (est_rr >= min_rr)
-        strategy.entry("Short", strategy.short)
-        strategy.exit("Exit Short", "Short", stop=stop_level, limit=target_level)
-
-// =========================================================================
-// 10. PLOTS, TARGET CHANNEL, & ACTIVE TRADE LEVELS (VISUALS)
-// =========================================================================
-// AI Volatility-Scaled Future Target Channel (90% Confidence Band)
-float future_range = 1.65 * atr
-p_upper = plot(close + future_range, title="AI Upper Target Band", color=color.new(#14b8a6, 85))
-p_lower = plot(close - future_range, title="AI Lower Target Band", color=color.new(#14b8a6, 85))
-fill(p_upper, p_lower, color=color.new(#14b8a6, 96), title="AI Confidence Channel")
-
-plot(ema_fast, title="Fast EMA", color=color.new(#3b82f6, 0), linewidth=1)
-plot(sma_slow, title="Slow SMA", color=color.new(#f59e0b, 0), linewidth=2)
-
-// Persistent Active Trade Levels Tracking
+// Dynamic SL plot visualization
 var float active_sl = na
 var float active_tp = na
 var float active_entry = na
 var int active_dir = 0
 
-// We hook into strategy position transitions
-if (strategy.position_size > 0 and strategy.position_size[1] == 0)
-    active_sl := stop_level
-    active_tp := target_level
+if (strategy.position_size > 0)
+    active_sl := long_stop
+    active_tp := long_tp
     active_entry := strategy.position_avg_price
     active_dir := 1
-    // Create visual label on the chart detailing exact trade numbers
-    label.new(bar_index, low - (atr * 0.75), 
-              text="🟢 LONG ENTRY: " + str.tostring(strategy.position_avg_price, "#.##") + "\n🛑 SL: " + str.tostring(stop_level, "#.##") + "\n🎯 TP: " + str.tostring(target_level, "#.##"), 
-              color=color.new(#10b981, 10), 
-              textcolor=color.white, 
-              style=label.style_label_up, 
-              size=size.small)
-else if (strategy.position_size < 0 and strategy.position_size[1] == 0)
-    active_sl := stop_level
-    active_tp := target_level
+else if (strategy.position_size < 0)
+    active_sl := short_stop
+    active_tp := short_tp
     active_entry := strategy.position_avg_price
     active_dir := -1
-    // Create visual label on the chart detailing exact trade numbers
-    label.new(bar_index, high + (atr * 0.75), 
-              text="🔴 SHORT ENTRY: " + str.tostring(strategy.position_avg_price, "#.##") + "\n🛑 SL: " + str.tostring(stop_level, "#.##") + "\n🎯 TP: " + str.tostring(target_level, "#.##"), 
-              color=color.new(#ef4444, 10), 
-              textcolor=color.white, 
-              style=label.style_label_down, 
-              size=size.small)
-
-// Clear on flat position
-if (strategy.position_size == 0)
+else
     active_sl := na
     active_tp := na
     active_entry := na
     active_dir := 0
 
-// Plot visible active stop loss, entry, and target levels
 plot(active_sl, title="Active Stop Loss Line", color=color.new(color.red, 20), style=plot.style_linebr, linewidth=2)
 plot(active_entry, title="Active Entry Line", color=color.new(color.blue, 20), style=plot.style_linebr, linewidth=2)
 plot(active_tp, title="Active Target Line", color=color.new(color.green, 20), style=plot.style_linebr, linewidth=2)
