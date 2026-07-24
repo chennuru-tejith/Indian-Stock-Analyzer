@@ -190,22 +190,36 @@ float w_volat  = 0.05
 float w_mtf    = 0.10
 
 float t_score = 0.0
-if (close > ema_fast) t_score := t_score + 40
-if (close > sma_slow) t_score := t_score + 40
-if (slope_fast > 0)   t_score := t_score + 20
-if (close < ema_fast) t_score := t_score - 40
-if (close < sma_slow) t_score := t_score - 40
-if (slope_fast < 0)   t_score := t_score - 20
+if (close > ema_fast)
+    t_score := t_score + 40
+if (close > sma_slow)
+    t_score := t_score + 40
+if (slope_fast > 0)
+    t_score := t_score + 20
+if (close < ema_fast)
+    t_score := t_score - 40
+if (close < sma_slow)
+    t_score := t_score - 40
+if (slope_fast < 0)
+    t_score := t_score - 20
 
 float m_score = 0.0
-if (rsi_val > 50) m_score := m_score + 30
-if (rsi_val <= rsi_os) m_score := m_score + 20
-if (rsi_val >= rsi_ob) m_score := m_score - 20
-if (macd_hist > 0) m_score := m_score + 25
-if (hist_deriv > 0) m_score := m_score + 25
-if (rsi_val < 50) m_score := m_score - 30
-if (macd_hist < 0) m_score := m_score - 25
-if (hist_deriv < 0) m_score := m_score - 25
+if (rsi_val > 50)
+    m_score := m_score + 30
+if (rsi_val <= rsi_os)
+    m_score := m_score + 20
+if (rsi_val >= rsi_ob)
+    m_score := m_score - 20
+if (macd_hist > 0)
+    m_score := m_score + 25
+if (hist_deriv > 0)
+    m_score := m_score + 25
+if (rsi_val < 50)
+    m_score := m_score - 30
+if (macd_hist < 0)
+    m_score := m_score - 25
+if (hist_deriv < 0)
+    m_score := m_score - 25
 
 float v_score = 0.0
 if (close > vwap_val) v_score := v_score + 50
