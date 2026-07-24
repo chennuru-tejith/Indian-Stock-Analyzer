@@ -90,8 +90,8 @@ plot(show_cpr ? pivot_p : na, title="CPR Pivot (P)", color=color.new(#a855f7, 20
 plot(show_cpr ? cpr_top : na, title="CPR Top (TC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
 plot(show_cpr ? cpr_bottom : na, title="CPR Bottom (BC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
 
-plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#ef4444, 30), linewidth=1, style=plot.style_dashed)
-plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_dashed)
+plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#ef4444, 30), linewidth=1, style=plot.style_linebr)
+plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_linebr)
 
 // =========================================================================
 // 4. CORE TECHNICAL INDICATORS & AUTO INDEX VOLUME COMPENSATION
