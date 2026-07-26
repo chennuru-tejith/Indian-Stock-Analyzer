@@ -1,12 +1,16 @@
 //@version=6
-strategy("Aladdin Institutional F&O Broker Strategy Companion", shorttitle="Aladdin F&O Strategy", overlay=true, initial_capital=100000, default_qty_type=strategy.percent_of_equity, default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.03, slippage=2, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+strategy("Aladdin Multi-Timeframe Adaptive AI Strategy Companion", shorttitle="Aladdin Adaptive Strategy", overlay=true, initial_capital=100000, default_qty_type=strategy.percent_of_equity, default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.03, slippage=2, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
 // =========================================================================
-// 1. INPUT PARAMETERS (F&O STRATEGY CONTROLS)
+// 1. INPUT PARAMETERS & TIMEFRAME ADAPTATION CONFIGURATION
 // =========================================================================
 gp_mode      = "SYSTEM OPERATING MODE"
 sys_mode     = input.string("BALANCED", title="Operating Mode", options=["CONSERVATIVE", "BALANCED", "AGGRESSIVE"], group=gp_mode)
 min_rr       = input.float(1.5, title="Minimum Reward-to-Risk Ratio", step=0.1, group=gp_mode)
+
+gp_tf        = "TIMEFRAME ADAPTATION ENGINE"
+htf_mode     = input.string("AUTO", title="Higher Timeframe Mode", options=["AUTO", "CUSTOM"], group=gp_tf)
+custom_htf   = input.timeframe("240", title="Custom HTF (if CUSTOM selected)", group=gp_tf)
 
 gp_fo        = "F&O BROKER RULES (NIFTY / BANKNIFTY)"
 strike_step_in = input.int(50, title="Option Strike Step (Nifty: 50, BankNifty: 100)", group=gp_fo)
@@ -46,14 +50,11 @@ gp_volatility= "E. VOLATILITY ENGINE"
 atr_len      = input.int(14, title="ATR Length", group=gp_volatility)
 atr_stop_m   = input.float(2.0, title="ATR Stop Loss Multiplier", step=0.1, group=gp_volatility)
 
-gp_mtf       = "F. MULTI-TIMEFRAME ALIGNMENT"
-htf_res      = input.timeframe("240", title="Higher Timeframe", group=gp_mtf)
-
-gp_session   = "G. SESSION & FILTER RULES"
+gp_session   = "F. SESSION & FILTER RULES"
 use_session  = input.bool(false, title="Restrict Trading to Session", group=gp_session)
 session_time = input.session("0915-1530:23456", title="Active Trading Session", group=gp_session)
 
-gp_dates     = "H. BACKTEST DATE RANGE"
+gp_dates     = "G. BACKTEST DATE RANGE"
 start_year   = input.int(2020, title="Start Year", group=gp_dates)
 start_month  = input.int(1, title="Start Month", group=gp_dates)
 start_day    = input.int(1, title="Start Day", group=gp_dates)
@@ -62,13 +63,21 @@ end_month    = input.int(12, title="End Month", group=gp_dates)
 end_day      = input.int(31, title="End Day", group=gp_dates)
 
 // =========================================================================
-// 2. SESSION & DATE FILTERS
+// 2. SESSION & TIMEFRAME ADAPTATION RESOLVER
 // =========================================================================
 in_session = not use_session or not na(time(timeframe.period, session_time))
 in_date_range = time >= timestamp(start_year, start_month, start_day, 0, 0) and time <= timestamp(end_year, end_month, end_day, 23, 59)
 trade_allowed = in_session and in_date_range
 
-// Auto Option Strike Step Calculation
+auto_htf = timeframe.isintraday ? 
+     (timeframe.multiplier <= 3 ? "15" : 
+      timeframe.multiplier <= 10 ? "60" : 
+      timeframe.multiplier <= 30 ? "240" : "D") : "W"
+
+resolved_htf = htf_mode == "AUTO" ? auto_htf : custom_htf
+float tf_mins = timeframe.isintraday ? timeframe.multiplier : 1440.0
+float adaptive_atr_stop = atr_stop_m + (tf_mins < 5.0 ? 0.3 : tf_mins < 15.0 ? 0.15 : 0.0)
+
 strike_step = str.contains(syminfo.ticker, "BANKNIFTY") ? 100 : strike_step_in
 atm_strike  = math.round(close / strike_step) * strike_step
 
@@ -94,11 +103,25 @@ plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#
 plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_linebr)
 
 // =========================================================================
-// 4. CORE TECHNICAL INDICATORS & AUTO INDEX VOLUME COMPENSATION
+// 4. KAUFMAN ADAPTIVE MOVING AVERAGE (KAMA) & INDICATORS
 // =========================================================================
 ema_fast = ta.ema(close, ema_fast_len)
 sma_slow = ta.sma(close, sma_slow_len)
 atr      = ta.atr(atr_len)
+
+// Kaufman's Adaptive Moving Average (KAMA)
+n_er = 10
+change_er = math.abs(close - close[n_er])
+volatility_er = math.sum(math.abs(close - close[1]), n_er)
+er = volatility_er > 0 ? change_er / volatility_er : 0.0
+
+sc_fast = 2.0 / (2.0 + 1.0)
+sc_slow = 2.0 / (30.0 + 1.0)
+sc = math.pow(er * (sc_fast - sc_slow) + sc_slow, 2)
+
+var float kama = na
+kama := na(kama[1]) ? close : kama[1] + sc * (close - kama[1])
+
 slope_fast = (ema_fast - ema_fast[5]) / (not na(atr) and atr > 0 ? atr * 5 : 1.0) * 100
 
 [di_plus, di_minus, adx_val] = ta.dmi(adx_len, adx_len)
@@ -135,10 +158,14 @@ int regime_type = 0
 is_trending = adx_val >= adx_limit and price_efficiency >= 0.45
 is_volatile = atr_pct >= ta.sma(atr_pct, 100) * 1.5
 
-if (is_volatile) regime_type := 3
-else if (is_squeezed) regime_type := 2
-else if (is_trending) regime_type := 1
-else regime_type := 0
+if (is_volatile)
+    regime_type := 3
+else if (is_squeezed)
+    regime_type := 2
+else if (is_trending)
+    regime_type := 1
+else
+    regime_type := 0
 
 // =========================================================================
 // 5. PRICE STRUCTURE & SMART MONEY CONCEPTS
@@ -149,8 +176,10 @@ var float swing_low = na
 ph = ta.pivothigh(high, pivot_len, pivot_len)
 pl = ta.pivotlow(low, pivot_len, pivot_len)
 
-if (not na(ph)) swing_high := ph
-if (not na(pl)) swing_low := pl
+if (not na(ph))
+    swing_high := ph
+if (not na(pl))
+    swing_low := pl
 
 var bool is_bullish_trend = true
 bool bullish_bos = false
@@ -158,11 +187,15 @@ bool bearish_bos = false
 
 if (not na(swing_high) and not na(swing_low))
     if (is_bullish_trend)
-        if (close > swing_high and nz(close[1]) <= swing_high) bullish_bos := true
-        else if (close < swing_low and nz(close[1]) >= swing_low) is_bullish_trend := false
+        if (close > swing_high and nz(close[1]) <= swing_high)
+            bullish_bos := true
+        else if (close < swing_low and nz(close[1]) >= swing_low)
+            is_bullish_trend := false
     else
-        if (close < swing_low and nz(close[1]) >= swing_low) bearish_bos := true
-        else if (close > swing_high and nz(close[1]) <= swing_high) is_bullish_trend := true
+        if (close < swing_low and nz(close[1]) >= swing_low)
+            bearish_bos := true
+        else if (close > swing_high and nz(close[1]) <= swing_high)
+            is_bullish_trend := true
 
 bool bullish_fvg = low[0] > high[2] and (low[0] - high[2]) > (fvg_threshold * atr)
 bool bearish_fvg = high[0] < low[2] and (low[2] - high[0]) > (fvg_threshold * atr)
@@ -171,11 +204,11 @@ bool bull_liquidity_sweep = (not na(swing_low) and low < swing_low and close > s
 bool bear_liquidity_sweep = (not na(swing_high) and high > swing_high and close < swing_high) or (high > pdh and close < pdh)
 
 // =========================================================================
-// 6. MULTI-TIMEFRAME ANALYSIS
+// 6. MULTI-TIMEFRAME ADAPTIVE ANALYSIS
 // =========================================================================
-htf_ema_fast = request.security(syminfo.tickerid, htf_res, ta.ema(close, ema_fast_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
-htf_sma_slow = request.security(syminfo.tickerid, htf_res, ta.sma(close, sma_slow_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
-htf_rsi      = request.security(syminfo.tickerid, htf_res, ta.rsi(close, 14)[1], barmerge.gaps_off, barmerge.lookahead_off)
+htf_ema_fast = request.security(syminfo.tickerid, resolved_htf, ta.ema(close, ema_fast_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
+htf_sma_slow = request.security(syminfo.tickerid, resolved_htf, ta.sma(close, sma_slow_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
+htf_rsi      = request.security(syminfo.tickerid, resolved_htf, ta.rsi(close, 14)[1], barmerge.gaps_off, barmerge.lookahead_off)
 htf_trend_bullish = htf_ema_fast > htf_sma_slow
 
 // =========================================================================
@@ -191,15 +224,19 @@ float w_mtf    = 0.10
 
 float t_score = 0.0
 if (close > ema_fast)
-    t_score := t_score + 40
+    t_score := t_score + 30
+if (close > kama)
+    t_score := t_score + 30
 if (close > sma_slow)
-    t_score := t_score + 40
+    t_score := t_score + 20
 if (slope_fast > 0)
     t_score := t_score + 20
 if (close < ema_fast)
-    t_score := t_score - 40
+    t_score := t_score - 30
+if (close < kama)
+    t_score := t_score - 30
 if (close < sma_slow)
-    t_score := t_score - 40
+    t_score := t_score - 20
 if (slope_fast < 0)
     t_score := t_score - 20
 
@@ -222,26 +259,38 @@ if (hist_deriv < 0)
     m_score := m_score - 25
 
 float v_score = 0.0
-if (close > vwap_val) v_score := v_score + 50
-else v_score := v_score - 50
-if (close > cpr_top) v_score := v_score + 50
-else if (close < cpr_bottom) v_score := v_score - 50
+if (close > vwap_val)
+    v_score := v_score + 50
+else
+    v_score := v_score - 50
+if (close > cpr_top)
+    v_score := v_score + 50
+else if (close < cpr_bottom)
+    v_score := v_score - 50
 
 float s_score = bullish_bos ? 100.0 : bearish_bos ? -100.0 : 0.0
 
 float smc_score = 0.0
-if (bullish_fvg) smc_score := smc_score + 50.0
-if (bearish_fvg) smc_score := smc_score - 50.0
-if (bull_liquidity_sweep) smc_score := smc_score + 50.0
-if (bear_liquidity_sweep) smc_score := smc_score - 50.0
+if (bullish_fvg)
+    smc_score := smc_score + 50.0
+if (bearish_fvg)
+    smc_score := smc_score - 50.0
+if (bull_liquidity_sweep)
+    smc_score := smc_score + 50.0
+if (bear_liquidity_sweep)
+    smc_score := smc_score - 50.0
 
 float volatility_score = is_squeezed ? 50.0 : 0.0
 
 float mtf_score_val = 0.0
-if (htf_trend_bullish) mtf_score_val := mtf_score_val + 60.0
-else mtf_score_val := mtf_score_val - 60.0
-if (not na(htf_rsi) and htf_rsi > 50) mtf_score_val := mtf_score_val + 40.0
-else if (not na(htf_rsi) and htf_rsi < 50) mtf_score_val := mtf_score_val - 40.0
+if (htf_trend_bullish)
+    mtf_score_val := mtf_score_val + 60.0
+else
+    mtf_score_val := mtf_score_val - 60.0
+if (not na(htf_rsi) and htf_rsi > 50)
+    mtf_score_val := mtf_score_val + 40.0
+else if (not na(htf_rsi) and htf_rsi < 50)
+    mtf_score_val := mtf_score_val - 40.0
 
 float final_bullish_factor = 0.0
 float final_bearish_factor = 0.0
@@ -298,7 +347,7 @@ var float short_stop = na
 var float short_tp = na
 
 if (buy_signal and strategy.position_size == 0)
-    long_stop := math.min(close - (atr_stop_m * atr), nz(swing_low, close * 0.99))
+    long_stop := math.min(close - (adaptive_atr_stop * atr), nz(swing_low, close * 0.99))
     float risk = close - long_stop
     long_tp := close + (2.0 * risk)
     if ((long_tp - close) / risk >= min_rr)
@@ -306,7 +355,7 @@ if (buy_signal and strategy.position_size == 0)
         strategy.exit("Exit BUY CE", "BUY CE (" + str.tostring(atm_strike) + ")", stop=long_stop, limit=long_tp)
 
 if (sell_signal and strategy.position_size == 0)
-    short_stop := math.max(close + (atr_stop_m * atr), nz(swing_high, close * 1.01))
+    short_stop := math.max(close + (adaptive_atr_stop * atr), nz(swing_high, close * 1.01))
     float risk = short_stop - close
     short_tp := close - (2.0 * risk)
     if ((close - short_tp) / risk >= min_rr)

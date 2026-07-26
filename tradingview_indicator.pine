@@ -1,12 +1,16 @@
 //@version=6
-indicator("Aladdin Institutional F&O Broker Intelligence Engine (Nifty / Index)", shorttitle="Aladdin F&O Broker", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+indicator("Aladdin Multi-Timeframe Adaptive AI Intelligence Engine", shorttitle="Aladdin Adaptive AI", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
 // =========================================================================
-// 1. INPUT PARAMETERS (F&O BROKER CONFIGURATIONS)
+// 1. INPUT PARAMETERS & TIMEFRAME ADAPTATION CONFIGURATION
 // =========================================================================
 gp_sys       = "SYSTEM CONFIGURATION"
 sys_mode     = input.string("BALANCED", title="Operating Mode", options=["CONSERVATIVE", "BALANCED", "AGGRESSIVE"], group=gp_sys)
 min_rr       = input.float(1.5, title="Minimum Reward-to-Risk Ratio", step=0.1, group=gp_sys)
+
+gp_tf        = "TIMEFRAME ADAPTATION ENGINE"
+htf_mode     = input.string("AUTO", title="Higher Timeframe Mode", options=["AUTO", "CUSTOM"], group=gp_tf)
+custom_htf   = input.timeframe("240", title="Custom HTF (if CUSTOM selected)", group=gp_tf)
 
 gp_fo        = "F&O BROKER RULES (NIFTY / BANKNIFTY)"
 strike_step_in = input.int(50, title="Option Strike Step (Nifty: 50, BankNifty: 100)", group=gp_fo)
@@ -48,19 +52,16 @@ gp_volatility= "E. VOLATILITY ENGINE"
 atr_len      = input.int(14, title="ATR Length", group=gp_volatility)
 atr_stop_m   = input.float(2.0, title="ATR Stop Loss Multiplier", step=0.1, group=gp_volatility)
 
-gp_mtf       = "F. MULTI-TIMEFRAME ALIGNMENT"
-htf_res      = input.timeframe("240", title="Higher Timeframe", group=gp_mtf)
-
-gp_session   = "G. SESSION RULES"
+gp_session   = "F. SESSION RULES"
 use_session  = input.bool(false, title="Restrict Trading Session", group=gp_session)
 session_time = input.session("0915-1530:23456", title="Trading Session Times", group=gp_session)
 
-gp_ui        = "H. TELEMETRY DISPLAY"
+gp_ui        = "G. TELEMETRY DISPLAY"
 show_dash    = input.bool(true, title="Show Telemetry Dashboard", group=gp_ui)
 dash_pos     = input.string("top_right", title="Dashboard Position", options=["top_right", "bottom_right", "top_left", "bottom_left"], group=gp_ui)
 
 // =========================================================================
-// 2. HELPER FUNCTIONS
+// 2. HELPER FUNCTIONS & AUTOMATIC TIMEFRAME RESOLVER
 // =========================================================================
 get_position(string pos_str) =>
     switch pos_str
@@ -81,14 +82,24 @@ format_vol(float vol) =>
     else
         str.tostring(vol, "#")
 
-// Auto Option Strike Step Calculation
+// Dynamic Higher Timeframe Resolution Auto-Mapper
+// Automatically adapts to 1m, 2m, 3m, 5m, 10m, 15m, 1h, 1d timeframes
+auto_htf = timeframe.isintraday ? 
+     (timeframe.multiplier <= 3 ? "15" : 
+      timeframe.multiplier <= 10 ? "60" : 
+      timeframe.multiplier <= 30 ? "240" : "D") : "W"
+
+resolved_htf = htf_mode == "AUTO" ? auto_htf : custom_htf
+
+float tf_mins = timeframe.isintraday ? timeframe.multiplier : 1440.0
+float adaptive_atr_stop = atr_stop_m + (tf_mins < 5.0 ? 0.3 : tf_mins < 15.0 ? 0.15 : 0.0)
+
 strike_step = str.contains(syminfo.ticker, "BANKNIFTY") ? 100 : strike_step_in
 atm_strike  = math.round(close / strike_step) * strike_step
 
 // =========================================================================
 // 3. CORE F&O ENGINE & CPR CALCULATIONS
 // =========================================================================
-// Fetch Previous Day High, Low, Close for Central Pivot Range (CPR)
 pdh = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
 pdl = request.security(syminfo.tickerid, "D", low[1], lookahead=barmerge.lookahead_on)
 pdc = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
@@ -107,40 +118,47 @@ is_wide_cpr   = cpr_width >= 0.50
 string cpr_status = is_narrow_cpr ? "Narrow CPR (Trending Day 🚀)" : is_wide_cpr ? "Wide CPR (Rangebound 📊)" : "Average CPR (Normal Day 🔄)"
 color cpr_color  = is_narrow_cpr ? color.green : is_wide_cpr ? color.orange : color.blue
 
-// Plot CPR Lines
 plot(show_cpr ? pivot_p : na, title="CPR Pivot (P)", color=color.new(#a855f7, 20), linewidth=2)
 plot(show_cpr ? cpr_top : na, title="CPR Top (TC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
 plot(show_cpr ? cpr_bottom : na, title="CPR Bottom (BC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
 
-// Plot Previous Day High & Low
 plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#ef4444, 30), linewidth=1, style=plot.style_linebr)
 plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_linebr)
 
 // =========================================================================
-// 4. TECHNICAL INDICATORS & AUTO INDEX VOLUME COMPENSATION
+// 4. KAUFMAN ADAPTIVE MOVING AVERAGE (KAMA) & INDICATORS
 // =========================================================================
 ema_fast = ta.ema(close, ema_fast_len)
 sma_slow = ta.sma(close, sma_slow_len)
 atr      = ta.atr(atr_len)
 
+// Kaufman's Adaptive Moving Average (KAMA)
+n_er = 10
+change_er = math.abs(close - close[n_er])
+volatility_er = math.sum(math.abs(close - close[1]), n_er)
+er = volatility_er > 0 ? change_er / volatility_er : 0.0
+
+sc_fast = 2.0 / (2.0 + 1.0)
+sc_slow = 2.0 / (30.0 + 1.0)
+sc = math.pow(er * (sc_fast - sc_slow) + sc_slow, 2)
+
+var float kama = na
+kama := na(kama[1]) ? close : kama[1] + sc * (close - kama[1])
+
 slope_fast = (ema_fast - ema_fast[5]) / (not na(atr) and atr > 0 ? atr * 5 : 1.0) * 100
 
-// ADX & DMI
 [di_plus, di_minus, adx_val] = ta.dmi(adx_len, adx_len)
 
-// RSI & MACD
 rsi_val = ta.rsi(close, rsi_len)
 [macd_line, macd_sig, macd_hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
 hist_deriv = macd_hist - macd_hist[1]
 
-// Detect if symbol is an Index or Volume is 0 (Cash Nifty Index case)
 src_volume   = nz(volume, 0.0)
 is_index     = syminfo.type == "index" or str.contains(syminfo.ticker, "NIFTY") or src_volume == 0
 vol_sma      = ta.sma(src_volume, 20)
 rvol         = (vol_sma > 0) ? src_volume / vol_sma : 1.0
 is_vol_spike = is_index ? true : rvol >= 1.5
 
-// Volume Demand Imbalance (Fallback to Price Location for Index)
 candle_range   = high - low
 bull_vol_ratio = candle_range > 0 ? (close - low) / candle_range : 0.5
 buy_vol        = src_volume * bull_vol_ratio
@@ -151,7 +169,6 @@ tot_vol_sum    = avg_buy_vol + avg_sell_vol
 buy_pct        = tot_vol_sum > 0 ? (avg_buy_vol / tot_vol_sum) * 100 : (bull_vol_ratio * 100)
 sell_pct       = 100.0 - buy_pct
 
-// VWAP & StdDev Bands
 vwap_raw = ta.vwap(close)
 vwap_val = not na(vwap_raw) ? vwap_raw : ema_fast
 vwap_stdev = ta.stdev(close, 20)
@@ -163,6 +180,7 @@ vwap_lower_2 = vwap_val - (2.0 * vwap_stdev)
 plot(show_vwap_sd ? vwap_val : na, title="VWAP", color=color.new(#3b82f6, 0), linewidth=2)
 plot(show_vwap_sd ? vwap_upper_1 : na, title="VWAP +1σ", color=color.new(#3b82f6, 70), style=plot.style_linebr)
 plot(show_vwap_sd ? vwap_lower_1 : na, title="VWAP -1σ", color=color.new(#3b82f6, 70), style=plot.style_linebr)
+plot(kama, title="Adaptive KAMA", color=color.new(#ec4899, 0), linewidth=1)
 
 // =========================================================================
 // 5. REGIME DETECTOR
@@ -244,14 +262,12 @@ if (not na(swing_high) and not na(swing_low))
             bullish_choch := true
             is_bullish_trend := true
 
-// FVG & Liquidity Sweeps (Stop Hunts)
 bool bullish_fvg = low[0] > high[2] and (low[0] - high[2]) > (fvg_threshold * atr)
 bool bearish_fvg = high[0] < low[2] and (low[2] - high[0]) > (fvg_threshold * atr)
 
 bool bull_liquidity_sweep = (not na(swing_low) and low < swing_low and close > swing_low) or (low < pdl and close > pdl)
 bool bear_liquidity_sweep = (not na(swing_high) and high > swing_high and close < swing_high) or (high > pdh and close < pdh)
 
-// Order Blocks
 var box bullish_ob_box = na
 var box bearish_ob_box = na
 if (bullish_bos and show_ob)
@@ -262,11 +278,11 @@ if (bearish_bos and show_ob)
     bearish_ob_box := box.new(left=bar_index - 5, top=nz(high[5], high), right=bar_index, bottom=nz(low[5], low), border_color=color.new(#ef4444, 80), bgcolor=color.new(#ef4444, 95))
 
 // =========================================================================
-// 7. MULTI-TIMEFRAME ANALYSIS
+// 7. MULTI-TIMEFRAME ADAPTIVE ANALYSIS
 // =========================================================================
-htf_ema_fast = request.security(syminfo.tickerid, htf_res, ta.ema(close, ema_fast_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
-htf_sma_slow = request.security(syminfo.tickerid, htf_res, ta.sma(close, sma_slow_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
-htf_rsi      = request.security(syminfo.tickerid, htf_res, ta.rsi(close, 14)[1], barmerge.gaps_off, barmerge.lookahead_off)
+htf_ema_fast = request.security(syminfo.tickerid, resolved_htf, ta.ema(close, ema_fast_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
+htf_sma_slow = request.security(syminfo.tickerid, resolved_htf, ta.sma(close, sma_slow_len)[1], barmerge.gaps_off, barmerge.lookahead_off)
+htf_rsi      = request.security(syminfo.tickerid, resolved_htf, ta.rsi(close, 14)[1], barmerge.gaps_off, barmerge.lookahead_off)
 htf_trend_bullish = htf_ema_fast > htf_sma_slow
 
 // =========================================================================
@@ -280,18 +296,22 @@ float w_smc    = 0.15
 float w_volat  = 0.05
 float w_mtf    = 0.10
 
-// Trend Score
+// Trend Score (EMA + KAMA Adaptive Confluence)
 float t_score = 0.0
 if (close > ema_fast)
-    t_score := t_score + 40
+    t_score := t_score + 30
+if (close > kama)
+    t_score := t_score + 30
 if (close > sma_slow)
-    t_score := t_score + 40
+    t_score := t_score + 20
 if (slope_fast > 0)
     t_score := t_score + 20
 if (close < ema_fast)
-    t_score := t_score - 40
+    t_score := t_score - 30
+if (close < kama)
+    t_score := t_score - 30
 if (close < sma_slow)
-    t_score := t_score - 40
+    t_score := t_score - 20
 if (slope_fast < 0)
     t_score := t_score - 20
 
@@ -316,28 +336,41 @@ if (hist_deriv < 0)
 
 // Participation / VWAP Score
 float v_score = 0.0
-if (close > vwap_val) v_score := v_score + 50
-else v_score := v_score - 50
+if (close > vwap_val)
+    v_score := v_score + 50
+else
+    v_score := v_score - 50
 
-if (close > cpr_top) v_score := v_score + 50
-else if (close < cpr_bottom) v_score := v_score - 50
+if (close > cpr_top)
+    v_score := v_score + 50
+else if (close < cpr_bottom)
+    v_score := v_score - 50
 
 // Structure & SMC Scores
 float s_score = bullish_bos ? 100.0 : bearish_bos ? -100.0 : 0.0
 
 float smc_score = 0.0
-if (bullish_fvg) smc_score := smc_score + 50.0
-if (bearish_fvg) smc_score := smc_score - 50.0
-if (bull_liquidity_sweep) smc_score := smc_score + 50.0
-if (bear_liquidity_sweep) smc_score := smc_score - 50.0
+if (bullish_fvg)
+    smc_score := smc_score + 50.0
+if (bearish_fvg)
+    smc_score := smc_score - 50.0
+if (bull_liquidity_sweep)
+    smc_score := smc_score + 50.0
+if (bear_liquidity_sweep)
+    smc_score := smc_score - 50.0
 
 float volatility_score = is_squeezed ? 50.0 : 0.0
 
 float mtf_score_val = 0.0
-if (htf_trend_bullish) mtf_score_val := mtf_score_val + 60.0
-else mtf_score_val := mtf_score_val - 60.0
-if (not na(htf_rsi) and htf_rsi > 50) mtf_score_val := mtf_score_val + 40.0
-else if (not na(htf_rsi) and htf_rsi < 50) mtf_score_val := mtf_score_val - 40.0
+if (htf_trend_bullish)
+    mtf_score_val := mtf_score_val + 60.0
+else
+    mtf_score_val := mtf_score_val - 60.0
+
+if (not na(htf_rsi) and htf_rsi > 50)
+    mtf_score_val := mtf_score_val + 40.0
+else if (not na(htf_rsi) and htf_rsi < 50)
+    mtf_score_val := mtf_score_val - 40.0
 
 float final_bull = 0.0
 float final_bear = 0.0
@@ -404,12 +437,12 @@ var float target_2 = na
 var string fo_action = "NO TRADE (HOLD / WAIT)"
 
 if (exec_buy)
-    stop_loss := math.min(close - (atr_stop_m * atr), nz(swing_low, close * 0.99))
+    stop_loss := math.min(close - (adaptive_atr_stop * atr), nz(swing_low, close * 0.99))
     float risk = close - stop_loss
     target_2 := close + (2.0 * risk)
     fo_action := "BUY " + str.tostring(atm_strike) + " CE (CALL)"
 else if (exec_sell)
-    stop_loss := math.max(close + (atr_stop_m * atr), nz(swing_high, close * 1.01))
+    stop_loss := math.max(close + (adaptive_atr_stop * atr), nz(swing_high, close * 1.01))
     float risk = stop_loss - close
     target_2 := close - (2.0 * risk)
     fo_action := "BUY " + str.tostring(atm_strike) + " PE (PUT)"
@@ -417,35 +450,38 @@ else if (exec_sell)
 // =========================================================================
 // 10. INSTITUTIONAL TELEMETRY DISPLAY BOARD
 // =========================================================================
-var table dash = table.new(get_position(dash_pos), 10, 11, border_color=color.new(#1e293b, 0), border_width=1)
+var table dash = table.new(get_position(dash_pos), 10, 12, border_color=color.new(#1e293b, 0), border_width=1)
 
 if (show_dash and barstate.islast)
-    table.cell(dash, 0, 0, "ALADDIN F&O BROKER TERMINAL (" + syminfo.ticker + ")", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=size.normal, text_halign=text.align_center)
+    table.cell(dash, 0, 0, "ALADDIN ADAPTIVE AI TERMINAL (" + syminfo.ticker + ")", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=size.normal, text_halign=text.align_center)
     table.merge_cells(dash, 0, 0, 1, 0)
     
-    cell_format(dash, 0, 1, "CPR Regime", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 1, cpr_status, cpr_color, color.new(#0f172a, 0))
-    
-    cell_format(dash, 0, 2, "Trend / Momentum", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 2, regime, regime_type == 1 ? color.green : color.orange, color.new(#0f172a, 0))
-    
-    cell_format(dash, 0, 3, "ATM Strike", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 3, str.tostring(atm_strike) + " ATM", color.yellow, color.new(#0f172a, 0))
-    
-    cell_format(dash, 0, 4, "VWAP Location", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 4, close > vwap_val ? "Above VWAP (Bullish)" : "Below VWAP (Bearish)", close > vwap_val ? color.green : color.red, color.new(#0f172a, 0))
-    
-    cell_format(dash, 0, 5, "Demand Bias", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 5, str.tostring(buy_pct, "#.0") + "% BUY / " + str.tostring(sell_pct, "#.0") + "% SELL", buy_pct >= 50.0 ? color.green : color.red, color.new(#0f172a, 0))
+    cell_format(dash, 0, 1, "Timeframe Mode", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 1, timeframe.period + " (HTF: " + resolved_htf + ")", color.cyan, color.new(#0f172a, 0))
 
-    cell_format(dash, 0, 6, "Bullish Prob (CE)", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 6, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0))
+    cell_format(dash, 0, 2, "CPR Regime", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 2, cpr_status, cpr_color, color.new(#0f172a, 0))
     
-    cell_format(dash, 0, 7, "Bearish Prob (PE)", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 7, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0))
+    cell_format(dash, 0, 3, "Trend / Momentum", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 3, regime, regime_type == 1 ? color.green : color.orange, color.new(#0f172a, 0))
+    
+    cell_format(dash, 0, 4, "ATM Strike", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 4, str.tostring(atm_strike) + " ATM", color.yellow, color.new(#0f172a, 0))
+    
+    cell_format(dash, 0, 5, "VWAP Location", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 5, close > vwap_val ? "Above VWAP (Bullish)" : "Below VWAP (Bearish)", close > vwap_val ? color.green : color.red, color.new(#0f172a, 0))
+    
+    cell_format(dash, 0, 6, "Demand Bias", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 6, str.tostring(buy_pct, "#.0") + "% BUY / " + str.tostring(sell_pct, "#.0") + "% SELL", buy_pct >= 50.0 ? color.green : color.red, color.new(#0f172a, 0))
 
-    cell_format(dash, 0, 8, "F&O Action Call", color.white, color.new(#1e293b, 0))
-    cell_format(dash, 1, 8, fo_action, exec_buy ? color.green : exec_sell ? color.red : color.orange, color.new(#1e293b, 0))
+    cell_format(dash, 0, 7, "Bullish Prob (CE)", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 7, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0))
+    
+    cell_format(dash, 0, 8, "Bearish Prob (PE)", color.white, color.new(#0f172a, 0))
+    cell_format(dash, 1, 8, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0))
+
+    cell_format(dash, 0, 9, "F&O Action Call", color.white, color.new(#1e293b, 0))
+    cell_format(dash, 1, 9, fo_action, exec_buy ? color.green : exec_sell ? color.red : color.orange, color.new(#1e293b, 0))
 
 // =========================================================================
 // 11. PLOTS, LABELS, & SIGNAL TARGETS
