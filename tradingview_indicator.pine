@@ -17,6 +17,7 @@ strike_step_in = input.int(50, title="Option Strike Step (Nifty: 50, BankNifty: 
 show_cpr     = input.bool(true, title="Show Daily Central Pivot Range (CPR)", group=gp_fo)
 show_pdh_pdl = input.bool(true, title="Show Previous Day High / Low (PDH/PDL)", group=gp_fo)
 show_vwap_sd = input.bool(true, title="Show VWAP StdDev Bands (1σ / 2σ)", group=gp_fo)
+show_trendlines = input.bool(true, title="Draw Dynamic Trendlines & Key Levels", group=gp_fo)
 
 gp_modules   = "MODULE TOGGLES"
 enable_trend = input.bool(true, title="Enable Trend Engine", group=gp_modules)
@@ -83,7 +84,6 @@ format_vol(float vol) =>
         str.tostring(vol, "#")
 
 // Dynamic Higher Timeframe Resolution Auto-Mapper
-// Automatically adapts to 1m, 2m, 3m, 5m, 10m, 15m, 1h, 1d timeframes
 auto_htf = timeframe.isintraday ? 
      (timeframe.multiplier <= 3 ? "15" : 
       timeframe.multiplier <= 10 ? "60" : 
@@ -276,6 +276,51 @@ if (bullish_bos and show_ob)
 if (bearish_bos and show_ob)
     box.delete(bearish_ob_box)
     bearish_ob_box := box.new(left=bar_index - 5, top=nz(high[5], high), right=bar_index, bottom=nz(low[5], low), border_color=color.new(#ef4444, 80), bgcolor=color.new(#ef4444, 95))
+
+// =========================================================================
+// 6.5 DYNAMIC TREND LINES, KEY LEVELS, & REGRESSION CHANNEL ENGINE
+// =========================================================================
+var line trendline_resistance = na
+var line trendline_support = na
+var line res_key_line = na
+var line sup_key_line = na
+var label res_key_label = na
+var label sup_key_label = na
+
+if (show_trendlines)
+    // Draw dynamic trendline connecting latest two swing highs
+    if (not na(ph) and not na(prev_swing_high))
+        line.delete(trendline_resistance)
+        trendline_resistance := line.new(x1=bar_index - (pivot_len * 3), y1=prev_swing_high, x2=bar_index - pivot_len, y2=swing_high, extend=extend.right, color=color.new(#ef4444, 30), width=2, style=line.style_dashed)
+
+    // Draw dynamic trendline connecting latest two swing lows
+    if (not na(pl) and not na(prev_swing_low))
+        line.delete(trendline_support)
+        trendline_support := line.new(x1=bar_index - (pivot_len * 3), y1=prev_swing_low, x2=bar_index - pivot_len, y2=swing_low, extend=extend.right, color=color.new(#10b981, 30), width=2, style=line.style_dashed)
+
+    // Draw horizontal key support and resistance lines with price tags on latest bar
+    if (barstate.islast)
+        line.delete(res_key_line)
+        line.delete(sup_key_line)
+        label.delete(res_key_label)
+        label.delete(sup_key_label)
+        
+        if (not na(swing_high))
+            res_key_line := line.new(x1=bar_index - 60, y1=swing_high, x2=bar_index + 12, y2=swing_high, color=color.new(#ef4444, 20), width=2, style=line.style_solid)
+            res_key_label := label.new(bar_index + 12, swing_high, text="🔴 KEY RESISTANCE: " + str.tostring(swing_high, "#.##"), color=color.new(#ef4444, 10), textcolor=color.white, style=label.style_label_left, size=size.small)
+            
+        if (not na(swing_low))
+            sup_key_line := line.new(x1=bar_index - 60, y1=swing_low, x2=bar_index + 12, y2=swing_low, color=color.new(#10b981, 20), width=2, style=line.style_solid)
+            sup_key_label := label.new(bar_index + 12, swing_low, text="🟢 KEY SUPPORT: " + str.tostring(swing_low, "#.##"), color=color.new(#10b981, 10), textcolor=color.white, style=label.style_label_left, size=size.small)
+
+// Linear Regression Trend Channel
+int channel_len = 50
+float linreg_center = ta.linreg(close, channel_len, 0)
+float linreg_stdev  = ta.stdev(close, channel_len) * 1.5
+
+plot(show_trendlines ? linreg_center : na, title="Trend Channel Center", color=color.new(#6366f1, 40), linewidth=1, style=plot.style_linebr)
+plot(show_trendlines ? (linreg_center + linreg_stdev) : na, title="Trend Channel Upper (Resistance)", color=color.new(#ef4444, 50), linewidth=1, style=plot.style_linebr)
+plot(show_trendlines ? (linreg_center - linreg_stdev) : na, title="Trend Channel Lower (Support)", color=color.new(#10b981, 50), linewidth=1, style=plot.style_linebr)
 
 // =========================================================================
 // 7. MULTI-TIMEFRAME ADAPTIVE ANALYSIS
