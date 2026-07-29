@@ -59,18 +59,19 @@ session_time = input.session("0915-1530:23456", title="Trading Session Times", g
 
 gp_ui        = "G. TELEMETRY DISPLAY"
 show_dash    = input.bool(true, title="Show Telemetry Dashboard", group=gp_ui)
-dash_pos     = input.string("top_right", title="Dashboard Position", options=["top_right", "bottom_right", "top_left", "bottom_left"], group=gp_ui)
+dash_pos     = input.string("bottom_right", title="Dashboard Position", options=["bottom_right", "top_right", "middle_right", "top_left", "bottom_left"], group=gp_ui)
 
 // =========================================================================
 // 2. HELPER FUNCTIONS & AUTOMATIC TIMEFRAME RESOLVER
 // =========================================================================
 get_position(string pos_str) =>
     switch pos_str
-        "top_right"    => position.top_right
         "bottom_right" => position.bottom_right
+        "top_right"    => position.top_right
+        "middle_right" => position.middle_right
         "top_left"     => position.top_left
         "bottom_left"  => position.bottom_left
-        => position.top_right
+        => position.bottom_right
 
 cell_format(table t, int col, int row, string txt, color text_c, color bg_c) =>
     table.cell(t, col, row, txt, text_color=text_c, bgcolor=bg_c, text_size=size.small, text_halign=text.align_left)
@@ -100,9 +101,9 @@ atm_strike  = math.round(close / strike_step) * strike_step
 // =========================================================================
 // 3. CORE F&O ENGINE & CPR CALCULATIONS
 // =========================================================================
-pdh = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
-pdl = request.security(syminfo.tickerid, "D", low[1], lookahead=barmerge.lookahead_on)
-pdc = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
+pdh = request.security(syminfo.tickerid, "D", high[1], barmerge.gaps_off, barmerge.lookahead_on)
+pdl = request.security(syminfo.tickerid, "D", low[1], barmerge.gaps_off, barmerge.lookahead_on)
+pdc = request.security(syminfo.tickerid, "D", close[1], barmerge.gaps_off, barmerge.lookahead_on)
 
 pivot_p  = (pdh + pdl + pdc) / 3.0
 pivot_bc = (pdh + pdl) / 2.0
@@ -118,12 +119,12 @@ is_wide_cpr   = cpr_width >= 0.50
 string cpr_status = is_narrow_cpr ? "Narrow CPR (Trending Day 🚀)" : is_wide_cpr ? "Wide CPR (Rangebound 📊)" : "Average CPR (Normal Day 🔄)"
 color cpr_color  = is_narrow_cpr ? color.green : is_wide_cpr ? color.orange : color.blue
 
-plot(show_cpr ? pivot_p : na, title="CPR Pivot (P)", color=color.new(#a855f7, 20), linewidth=2)
-plot(show_cpr ? cpr_top : na, title="CPR Top (TC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
-plot(show_cpr ? cpr_bottom : na, title="CPR Bottom (BC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
+plot(show_cpr ? pivot_p : na, title="CPR Pivot (P)", color=color.new(#a855f7, 20), linewidth=2, display=display.pane)
+plot(show_cpr ? cpr_top : na, title="CPR Top (TC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr, display=display.pane)
+plot(show_cpr ? cpr_bottom : na, title="CPR Bottom (BC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr, display=display.pane)
 
-plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#ef4444, 30), linewidth=1, style=plot.style_linebr)
-plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_linebr)
+plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#ef4444, 30), linewidth=1, style=plot.style_linebr, display=display.pane)
+plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_linebr, display=display.pane)
 
 // =========================================================================
 // 4. KAUFMAN ADAPTIVE MOVING AVERAGE (KAMA) & INDICATORS
@@ -177,10 +178,10 @@ vwap_lower_1 = vwap_val - (1.0 * vwap_stdev)
 vwap_upper_2 = vwap_val + (2.0 * vwap_stdev)
 vwap_lower_2 = vwap_val - (2.0 * vwap_stdev)
 
-plot(show_vwap_sd ? vwap_val : na, title="VWAP", color=color.new(#3b82f6, 0), linewidth=2)
-plot(show_vwap_sd ? vwap_upper_1 : na, title="VWAP +1σ", color=color.new(#3b82f6, 70), style=plot.style_linebr)
-plot(show_vwap_sd ? vwap_lower_1 : na, title="VWAP -1σ", color=color.new(#3b82f6, 70), style=plot.style_linebr)
-plot(kama, title="Adaptive KAMA", color=color.new(#ec4899, 0), linewidth=1)
+plot(show_vwap_sd ? vwap_val : na, title="VWAP", color=color.new(#3b82f6, 0), linewidth=2, display=display.pane)
+plot(show_vwap_sd ? vwap_upper_1 : na, title="VWAP +1σ", color=color.new(#3b82f6, 70), style=plot.style_linebr, display=display.pane)
+plot(show_vwap_sd ? vwap_lower_1 : na, title="VWAP -1σ", color=color.new(#3b82f6, 70), style=plot.style_linebr, display=display.pane)
+plot(kama, title="Adaptive KAMA", color=color.new(#ec4899, 0), linewidth=1, display=display.pane)
 
 // =========================================================================
 // 5. REGIME DETECTOR
@@ -318,9 +319,9 @@ int channel_len = 50
 float linreg_center = ta.linreg(close, channel_len, 0)
 float linreg_stdev  = ta.stdev(close, channel_len) * 1.5
 
-plot(show_trendlines ? linreg_center : na, title="Trend Channel Center", color=color.new(#6366f1, 40), linewidth=1, style=plot.style_linebr)
-plot(show_trendlines ? (linreg_center + linreg_stdev) : na, title="Trend Channel Upper (Resistance)", color=color.new(#ef4444, 50), linewidth=1, style=plot.style_linebr)
-plot(show_trendlines ? (linreg_center - linreg_stdev) : na, title="Trend Channel Lower (Support)", color=color.new(#10b981, 50), linewidth=1, style=plot.style_linebr)
+plot(show_trendlines ? linreg_center : na, title="Trend Channel Center", color=color.new(#6366f1, 40), linewidth=1, style=plot.style_linebr, display=display.pane)
+plot(show_trendlines ? (linreg_center + linreg_stdev) : na, title="Trend Channel Upper (Resistance)", color=color.new(#ef4444, 50), linewidth=1, style=plot.style_linebr, display=display.pane)
+plot(show_trendlines ? (linreg_center - linreg_stdev) : na, title="Trend Channel Lower (Support)", color=color.new(#10b981, 50), linewidth=1, style=plot.style_linebr, display=display.pane)
 
 // =========================================================================
 // 7. MULTI-TIMEFRAME ADAPTIVE ANALYSIS
@@ -532,12 +533,12 @@ if (show_dash and barstate.islast)
 // 11. PLOTS, LABELS, & SIGNAL TARGETS
 // =========================================================================
 float future_range = 1.65 * atr
-p_upper = plot(close + future_range, title="AI Upper Target Band", color=color.new(#14b8a6, 85))
-p_lower = plot(close - future_range, title="AI Lower Target Band", color=color.new(#14b8a6, 85))
+p_upper = plot(close + future_range, title="AI Upper Target Band", color=color.new(#14b8a6, 85), display=display.pane)
+p_lower = plot(close - future_range, title="AI Lower Target Band", color=color.new(#14b8a6, 85), display=display.pane)
 fill(p_upper, p_lower, color=color.new(#14b8a6, 96), title="AI Confidence Channel")
 
-plot(ema_fast, title="Fast EMA", color=color.new(#3b82f6, 0), linewidth=1)
-plot(sma_slow, title="Slow SMA", color=color.new(#f59e0b, 0), linewidth=2)
+plot(ema_fast, title="Fast EMA", color=color.new(#3b82f6, 0), linewidth=1, display=display.pane)
+plot(sma_slow, title="Slow SMA", color=color.new(#f59e0b, 0), linewidth=2, display=display.pane)
 
 var float active_sl = na
 var float active_tp = na
@@ -572,9 +573,9 @@ else if (active_dir == -1 and (high >= active_sl or low <= active_tp))
     active_entry := na
     active_dir := 0
 
-plot(active_sl, title="Active Stop Loss Line", color=color.new(color.red, 20), style=plot.style_linebr, linewidth=2)
-plot(active_entry, title="Active Entry Line", color=color.new(color.blue, 20), style=plot.style_linebr, linewidth=2)
-plot(active_tp, title="Active Target Line", color=color.new(color.green, 20), style=plot.style_linebr, linewidth=2)
+plot(active_sl, title="Active Stop Loss Line", color=color.new(color.red, 20), style=plot.style_linebr, linewidth=2, display=display.pane)
+plot(active_entry, title="Active Entry Line", color=color.new(color.blue, 20), style=plot.style_linebr, linewidth=2, display=display.pane)
+plot(active_tp, title="Active Target Line", color=color.new(color.green, 20), style=plot.style_linebr, linewidth=2, display=display.pane)
 
 plotshape(exec_buy, title="Buy Shape", style=shape.triangleup, location=location.belowbar, color=color.new(#10b981, 0), size=size.normal, text="BUY CE", textcolor=color.white)
 plotshape(exec_sell, title="Sell Shape", style=shape.triangledown, location=location.abovebar, color=color.new(#ef4444, 0), size=size.normal, text="SELL PE", textcolor=color.white)
