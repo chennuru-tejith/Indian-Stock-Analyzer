@@ -1,5 +1,5 @@
 //@version=6
-indicator("Aladdin Multi-Timeframe Adaptive AI Intelligence Engine", shorttitle="Aladdin Adaptive AI", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+indicator("Aladdin Multi-Timeframe Adaptive AI Intelligence Engine", shorttitle="ALADDIN AI", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
 // =========================================================================
 // 1. INPUT PARAMETERS & TIMEFRAME ADAPTATION CONFIGURATION
@@ -17,7 +17,7 @@ strike_step_in = input.int(50, title="Option Strike Step (Nifty: 50, BankNifty: 
 show_cpr     = input.bool(true, title="Show Daily Central Pivot Range (CPR)", group=gp_fo)
 show_pdh_pdl = input.bool(true, title="Show Previous Day High / Low (PDH/PDL)", group=gp_fo)
 show_vwap_sd = input.bool(true, title="Show VWAP StdDev Bands (1σ / 2σ)", group=gp_fo)
-show_trendlines = input.bool(true, title="Draw Dynamic Trendlines & Key Levels", group=gp_fo)
+show_trendlines = input.bool(true, title="Draw Dynamic Trendlines & Named Key Levels", group=gp_fo)
 
 gp_modules   = "MODULE TOGGLES"
 enable_trend = input.bool(true, title="Enable Trend Engine", group=gp_modules)
@@ -125,6 +125,22 @@ plot(show_cpr ? cpr_bottom : na, title="CPR Bottom (BC)", color=color.new(#c084f
 
 plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#ef4444, 30), linewidth=1, style=plot.style_linebr, display=display.pane)
 plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_linebr, display=display.pane)
+
+// Named Labels on Latest Bar for CPR & Previous Day High / Low
+var label pdh_lbl = na
+var label pdl_lbl = na
+var label cpr_lbl = na
+
+if (barstate.islast)
+    label.delete(pdh_lbl)
+    label.delete(pdl_lbl)
+    label.delete(cpr_lbl)
+    if (show_pdh_pdl and not na(pdh))
+        pdh_lbl := label.new(bar_index + 3, pdh, text="🔴 PREV DAY HIGH (PDH): " + str.tostring(pdh, "#.##"), color=color.new(#ef4444, 10), textcolor=color.white, style=label.style_label_left, size=size.small)
+    if (show_pdh_pdl and not na(pdl))
+        pdl_lbl := label.new(bar_index + 3, pdl, text="🟢 PREV DAY LOW (PDL): " + str.tostring(pdl, "#.##"), color=color.new(#10b981, 10), textcolor=color.white, style=label.style_label_left, size=size.small)
+    if (show_cpr and not na(pivot_p))
+        cpr_lbl := label.new(bar_index + 3, pivot_p, text="🟣 CPR PIVOT: " + str.tostring(pivot_p, "#.##"), color=color.new(#a855f7, 10), textcolor=color.white, style=label.style_label_left, size=size.small)
 
 // =========================================================================
 // 4. KAUFMAN ADAPTIVE MOVING AVERAGE (KAMA) & INDICATORS
@@ -287,17 +303,23 @@ var line res_key_line = na
 var line sup_key_line = na
 var label res_key_label = na
 var label sup_key_label = na
+var label trend_res_label = na
+var label trend_sup_label = na
 
 if (show_trendlines)
-    // Draw dynamic trendline connecting latest two swing highs
+    // Draw dynamic trendline connecting latest two swing highs with text label
     if (not na(ph) and not na(prev_swing_high))
         line.delete(trendline_resistance)
+        label.delete(trend_res_label)
         trendline_resistance := line.new(x1=bar_index - (pivot_len * 3), y1=prev_swing_high, x2=bar_index - pivot_len, y2=swing_high, extend=extend.right, color=color.new(#ef4444, 30), width=2, style=line.style_dashed)
+        trend_res_label := label.new(bar_index - pivot_len, swing_high, text="🔴 RESISTANCE TRENDLINE", color=color.new(#ef4444, 10), textcolor=color.white, style=label.style_label_down, size=size.small)
 
-    // Draw dynamic trendline connecting latest two swing lows
+    // Draw dynamic trendline connecting latest two swing lows with text label
     if (not na(pl) and not na(prev_swing_low))
         line.delete(trendline_support)
+        label.delete(trend_sup_label)
         trendline_support := line.new(x1=bar_index - (pivot_len * 3), y1=prev_swing_low, x2=bar_index - pivot_len, y2=swing_low, extend=extend.right, color=color.new(#10b981, 30), width=2, style=line.style_dashed)
+        trend_sup_label := label.new(bar_index - pivot_len, swing_low, text="🟢 SUPPORT TRENDLINE", color=color.new(#10b981, 10), textcolor=color.white, style=label.style_label_up, size=size.small)
 
     // Draw horizontal key support and resistance lines with price tags on latest bar
     if (barstate.islast)
@@ -503,7 +525,7 @@ if (show_dash and barstate.islast)
     table.merge_cells(dash, 0, 0, 1, 0)
     
     cell_format(dash, 0, 1, "Timeframe Mode", color.white, color.new(#0f172a, 0))
-    cell_format(dash, 1, 1, timeframe.period + " (HTF: " + resolved_htf + ")", color.cyan, color.new(#0f172a, 0))
+    cell_format(dash, 1, 1, timeframe.period + " (HTF: " + resolved_htf + ")", color.new(#06b6d4, 0), color.new(#0f172a, 0))
 
     cell_format(dash, 0, 2, "CPR Regime", color.white, color.new(#0f172a, 0))
     cell_format(dash, 1, 2, cpr_status, cpr_color, color.new(#0f172a, 0))
