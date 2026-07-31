@@ -84,9 +84,9 @@ atm_strike  = math.round(close / strike_step) * strike_step
 // =========================================================================
 // 3. CORE F&O ENGINE & CPR CALCULATIONS
 // =========================================================================
-pdh = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
-pdl = request.security(syminfo.tickerid, "D", low[1], lookahead=barmerge.lookahead_on)
-pdc = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
+pdh = request.security(syminfo.tickerid, "D", high[1], barmerge.gaps_off, barmerge.lookahead_on)
+pdl = request.security(syminfo.tickerid, "D", low[1], barmerge.gaps_off, barmerge.lookahead_on)
+pdc = request.security(syminfo.tickerid, "D", close[1], barmerge.gaps_off, barmerge.lookahead_on)
 
 pivot_p  = (pdh + pdl + pdc) / 3.0
 pivot_bc = (pdh + pdl) / 2.0
@@ -95,12 +95,12 @@ pivot_tc = (2.0 * pivot_p) - pivot_bc
 cpr_top    = math.max(pivot_tc, pivot_bc)
 cpr_bottom = math.min(pivot_tc, pivot_bc)
 
-plot(show_cpr ? pivot_p : na, title="CPR Pivot (P)", color=color.new(#a855f7, 20), linewidth=2)
-plot(show_cpr ? cpr_top : na, title="CPR Top (TC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
-plot(show_cpr ? cpr_bottom : na, title="CPR Bottom (BC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr)
+plot(show_cpr ? pivot_p : na, title="CPR Pivot (P)", color=color.new(#a855f7, 20), linewidth=2, display=display.pane)
+plot(show_cpr ? cpr_top : na, title="CPR Top (TC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr, display=display.pane)
+plot(show_cpr ? cpr_bottom : na, title="CPR Bottom (BC)", color=color.new(#c084fc, 40), linewidth=1, style=plot.style_linebr, display=display.pane)
 
-plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#ef4444, 30), linewidth=1, style=plot.style_linebr)
-plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_linebr)
+plot(show_pdh_pdl ? pdh : na, title="Previous Day High (PDH)", color=color.new(#ef4444, 30), linewidth=1, style=plot.style_linebr, display=display.pane)
+plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#10b981, 30), linewidth=1, style=plot.style_linebr, display=display.pane)
 
 // =========================================================================
 // 4. KAUFMAN ADAPTIVE MOVING AVERAGE (KAMA) & INDICATORS
@@ -108,6 +108,7 @@ plot(show_pdh_pdl ? pdl : na, title="Previous Day Low (PDL)", color=color.new(#1
 ema_fast = ta.ema(close, ema_fast_len)
 sma_slow = ta.sma(close, sma_slow_len)
 atr      = ta.atr(atr_len)
+slope_fast = (ema_fast - ema_fast[5]) / (not na(atr) and atr > 0 ? atr * 5 : 1.0) * 100
 
 // Kaufman's Adaptive Moving Average (KAMA)
 n_er = 10
@@ -121,8 +122,6 @@ sc = math.pow(er * (sc_fast - sc_slow) + sc_slow, 2)
 
 var float kama = na
 kama := na(kama[1]) ? close : kama[1] + sc * (close - kama[1])
-
-slope_fast = (ema_fast - ema_fast[5]) / (not na(atr) and atr > 0 ? atr * 5 : 1.0) * 100
 
 [di_plus, di_minus, adx_val] = ta.dmi(adx_len, adx_len)
 rsi_val = ta.rsi(close, rsi_len)
@@ -384,6 +383,6 @@ else
     active_entry := na
     active_dir := 0
 
-plot(active_sl, title="Active Stop Loss Line", color=color.new(color.red, 20), style=plot.style_linebr, linewidth=2)
-plot(active_entry, title="Active Entry Line", color=color.new(color.blue, 20), style=plot.style_linebr, linewidth=2)
-plot(active_tp, title="Active Target Line", color=color.new(color.green, 20), style=plot.style_linebr, linewidth=2)
+plot(active_sl, title="Active Stop Loss Line", color=color.new(color.red, 20), style=plot.style_linebr, linewidth=2, display=display.pane)
+plot(active_entry, title="Active Entry Line", color=color.new(color.blue, 20), style=plot.style_linebr, linewidth=2, display=display.pane)
+plot(active_tp, title="Active Target Line", color=color.new(color.green, 20), style=plot.style_linebr, linewidth=2, display=display.pane)
