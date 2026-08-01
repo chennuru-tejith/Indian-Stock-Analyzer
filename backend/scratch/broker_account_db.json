@@ -7,24 +7,24 @@
   "positions": [],
   "orders": [
     {
-      "orderId": "ORD-669341",
+      "orderId": "ORD-399797",
       "symbol": "ITC.NS",
       "side": "BUY",
       "quantity": 10,
       "price": 400,
       "orderType": "LIMIT",
       "status": "COMPLETED",
-      "timestamp": "2026-07-31T18:23:46.371Z"
+      "timestamp": "2026-08-01T18:27:06.170Z"
     },
     {
-      "orderId": "ORD-818492",
+      "orderId": "ORD-515934",
       "symbol": "ITC.NS",
       "side": "SELL",
       "quantity": 10,
       "price": 410,
       "orderType": "LIMIT",
       "status": "COMPLETED",
-      "timestamp": "2026-07-31T18:23:46.373Z"
+      "timestamp": "2026-08-01T18:27:06.175Z"
     }
   ]
 }

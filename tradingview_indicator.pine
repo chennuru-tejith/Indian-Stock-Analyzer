@@ -12,6 +12,10 @@ gp_tf        = "TIMEFRAME ADAPTATION ENGINE"
 htf_mode     = input.string("AUTO", title="Higher Timeframe Mode", options=["AUTO", "CUSTOM"], group=gp_tf)
 custom_htf   = input.timeframe("240", title="Custom HTF (if CUSTOM selected)", group=gp_tf)
 
+gp_gift      = "H. GIFT NIFTY OVERNIGHT LEAD ENGINE (NSE IX 6:30 AM - 2:30 AM)"
+use_gift     = input.bool(true, title="Enable GIFT NIFTY Overnight Sentiment", group=gp_gift)
+gift_symbol  = input.symbol("NSEIX:GIFTNIFTY1!", title="GIFT NIFTY Ticker (NSE IX)", group=gp_gift)
+
 gp_fo        = "F&O BROKER RULES (NIFTY / BANKNIFTY)"
 strike_step_in = input.int(50, title="Option Strike Step (Nifty: 50, BankNifty: 100)", group=gp_fo)
 show_cpr     = input.bool(true, title="Show Daily Central Pivot Range (CPR)", group=gp_fo)
@@ -109,6 +113,19 @@ float adaptive_atr_stop = atr_stop_m + (tf_mins < 5.0 ? 0.3 : tf_mins < 15.0 ? 0
 
 strike_step = str.contains(syminfo.ticker, "BANKNIFTY") ? 100 : strike_step_in
 atm_strike  = math.round(close / strike_step) * strike_step
+
+// =========================================================================
+// 2.5 GIFT NIFTY OVERNIGHT LEAD ENGINE
+// =========================================================================
+gift_close = request.security(gift_symbol, timeframe.period, close, barmerge.gaps_off, barmerge.lookahead_on)
+gift_ema   = request.security(gift_symbol, timeframe.period, ta.ema(close, 20), barmerge.gaps_off, barmerge.lookahead_on)
+gift_rsi   = request.security(gift_symbol, timeframe.period, ta.rsi(close, 14), barmerge.gaps_off, barmerge.lookahead_on)
+
+bool gift_bullish = use_gift and not na(gift_close) and not na(gift_ema) and gift_close > gift_ema
+bool gift_bearish = use_gift and not na(gift_close) and not na(gift_ema) and gift_close < gift_ema
+
+string gift_status = not use_gift ? "Disabled ⭕" : gift_bullish ? "Bullish (Overnight Lead 🚀)" : gift_bearish ? "Bearish (Overnight Lead 📉)" : "Neutral 🔄"
+color gift_color = gift_bullish ? color.green : gift_bearish ? color.red : color.gray
 
 // =========================================================================
 // 3. CORE F&O ENGINE & CPR CALCULATIONS
@@ -366,15 +383,16 @@ htf_rsi      = request.security(syminfo.tickerid, resolved_htf, ta.rsi(close, 14
 htf_trend_bullish = htf_ema_fast > htf_sma_slow
 
 // =========================================================================
-// 8. AI CONFLUENCE SCORING ENGINE
+// 8. AI CONFLUENCE SCORING ENGINE (WITH GIFT NIFTY OVERNIGHT LEAD)
 // =========================================================================
-float w_trend  = 0.25
-float w_momen  = 0.20
+float w_trend  = 0.20
+float w_momen  = 0.15
 float w_volum  = is_index ? 0.05 : 0.15
-float w_struct = 0.20
+float w_struct = 0.15
 float w_smc    = 0.15
 float w_volat  = 0.05
 float w_mtf    = 0.10
+float w_gift   = use_gift ? 0.15 : 0.0
 
 // Trend Score (EMA + KAMA Adaptive Confluence)
 float t_score = 0.0
@@ -452,6 +470,8 @@ if (not na(htf_rsi) and htf_rsi > 50)
 else if (not na(htf_rsi) and htf_rsi < 50)
     mtf_score_val := mtf_score_val - 40.0
 
+float gift_score_val = gift_bullish ? 100.0 : gift_bearish ? -100.0 : 0.0
+
 float final_bull = 0.0
 float final_bear = 0.0
 float active_weights_sum = 0.0
@@ -484,6 +504,10 @@ if (enable_mtf)
     final_bull := final_bull + (math.max(0.0, mtf_score_val) * w_mtf)
     final_bear := final_bear + (math.max(0.0, -mtf_score_val) * w_mtf)
     active_weights_sum := active_weights_sum + w_mtf
+if (use_gift)
+    final_bull := final_bull + (math.max(0.0, gift_score_val) * w_gift)
+    final_bear := final_bear + (math.max(0.0, -gift_score_val) * w_gift)
+    active_weights_sum := active_weights_sum + w_gift
 
 float norm_factor = active_weights_sum > 0 ? active_weights_sum : 1.0
 int bullish_confidence = math.round(final_bull / norm_factor)
@@ -530,7 +554,7 @@ else if (exec_sell)
 // =========================================================================
 // 10. MOVABLE INSTITUTIONAL TELEMETRY DISPLAY BOARD
 // =========================================================================
-var table dash = table.new(get_position(dash_pos), 10, 12, border_color=color.new(#1e293b, 0), border_width=1)
+var table dash = table.new(get_position(dash_pos), 10, 13, border_color=color.new(#1e293b, 0), border_width=1)
 
 if (show_dash and barstate.islast)
     table.cell(dash, 0, 0, "ALADDIN ADAPTIVE AI TERMINAL (" + syminfo.ticker + ")", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=get_size(dash_size), text_halign=text.align_center)
@@ -539,29 +563,32 @@ if (show_dash and barstate.islast)
     cell_format(dash, 0, 1, "Timeframe Mode", color.white, color.new(#0f172a, 0), dash_size)
     cell_format(dash, 1, 1, timeframe.period + " (HTF: " + resolved_htf + ")", color.new(#06b6d4, 0), color.new(#0f172a, 0), dash_size)
 
-    cell_format(dash, 0, 2, "CPR Regime", color.white, color.new(#0f172a, 0), dash_size)
-    cell_format(dash, 1, 2, cpr_status, cpr_color, color.new(#0f172a, 0), dash_size)
-    
-    cell_format(dash, 0, 3, "Trend / Momentum", color.white, color.new(#0f172a, 0), dash_size)
-    cell_format(dash, 1, 3, regime, regime_type == 1 ? color.green : color.orange, color.new(#0f172a, 0), dash_size)
-    
-    cell_format(dash, 0, 4, "ATM Strike", color.white, color.new(#0f172a, 0), dash_size)
-    cell_format(dash, 1, 4, str.tostring(atm_strike) + " ATM", color.yellow, color.new(#0f172a, 0), dash_size)
-    
-    cell_format(dash, 0, 5, "VWAP Location", color.white, color.new(#0f172a, 0), dash_size)
-    cell_format(dash, 1, 5, close > vwap_val ? "Above VWAP (Bullish)" : "Below VWAP (Bearish)", close > vwap_val ? color.green : color.red, color.new(#0f172a, 0), dash_size)
-    
-    cell_format(dash, 0, 6, "Demand Bias", color.white, color.new(#0f172a, 0), dash_size)
-    cell_format(dash, 1, 6, str.tostring(buy_pct, "#.0") + "% BUY / " + str.tostring(sell_pct, "#.0") + "% SELL", buy_pct >= 50.0 ? color.green : color.red, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 0, 2, "GIFT NIFTY Lead", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 2, gift_status, gift_color, color.new(#0f172a, 0), dash_size)
 
-    cell_format(dash, 0, 7, "Bullish Prob (CE)", color.white, color.new(#0f172a, 0), dash_size)
-    cell_format(dash, 1, 7, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 0, 3, "CPR Regime", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 3, cpr_status, cpr_color, color.new(#0f172a, 0), dash_size)
     
-    cell_format(dash, 0, 8, "Bearish Prob (PE)", color.white, color.new(#0f172a, 0), dash_size)
-    cell_format(dash, 1, 8, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 0, 4, "Trend / Momentum", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 4, regime, regime_type == 1 ? color.green : color.orange, color.new(#0f172a, 0), dash_size)
+    
+    cell_format(dash, 0, 5, "ATM Strike", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 5, str.tostring(atm_strike) + " ATM", color.yellow, color.new(#0f172a, 0), dash_size)
+    
+    cell_format(dash, 0, 6, "VWAP Location", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 6, close > vwap_val ? "Above VWAP (Bullish)" : "Below VWAP (Bearish)", close > vwap_val ? color.green : color.red, color.new(#0f172a, 0), dash_size)
+    
+    cell_format(dash, 0, 7, "Demand Bias", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 7, str.tostring(buy_pct, "#.0") + "% BUY / " + str.tostring(sell_pct, "#.0") + "% SELL", buy_pct >= 50.0 ? color.green : color.red, color.new(#0f172a, 0), dash_size)
 
-    cell_format(dash, 0, 9, "F&O Action Call", color.white, color.new(#1e293b, 0), dash_size)
-    cell_format(dash, 1, 9, fo_action, exec_buy ? color.green : exec_sell ? color.red : color.orange, color.new(#1e293b, 0), dash_size)
+    cell_format(dash, 0, 8, "Bullish Prob (CE)", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 8, str.tostring(bullish_confidence) + "%", color.green, color.new(#0f172a, 0), dash_size)
+    
+    cell_format(dash, 0, 9, "Bearish Prob (PE)", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 9, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0), dash_size)
+
+    cell_format(dash, 0, 10, "F&O Action Call", color.white, color.new(#1e293b, 0), dash_size)
+    cell_format(dash, 1, 10, fo_action, exec_buy ? color.green : exec_sell ? color.red : color.orange, color.new(#1e293b, 0), dash_size)
 
 // =========================================================================
 // 11. PLOTS, LABELS, & SIGNAL TARGETS

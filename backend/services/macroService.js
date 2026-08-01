@@ -5,9 +5,10 @@ import { yahooFinance } from './dataService.js';
  * @returns {Promise<Array<Object>>} - Array of global indicators with current price and changes.
  */
 export async function fetchGlobalIndicators() {
-  const symbols = ['^NSEI', '^BSESN', '^GSPC', '^IXIC', 'CL=F', 'USDINR=X', 'GC=F', '^TNX'];
+  const symbols = ['^NSEI', 'GIFTNIFTY.NS', '^BSESN', '^GSPC', '^IXIC', 'CL=F', 'USDINR=X', 'GC=F', '^TNX'];
   const nameMapping = {
     '^NSEI': 'Nifty 50',
+    'GIFTNIFTY.NS': 'GIFT Nifty (Overnight 6:30AM-2:30AM)',
     '^BSESN': 'BSE Sensex',
     '^GSPC': 'S&P 500',
     '^IXIC': 'NASDAQ Composite',
