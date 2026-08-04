@@ -1,5 +1,5 @@
 //@version=6
-indicator("Aladdin Multi-Timeframe Adaptive AI Intelligence Engine", shorttitle="ALADDIN AI", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+indicator("Aladdin Multi-Timeframe Adaptive AI Intelligence Engine", shorttitle="ALADDIN AI", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=500)
 
 // =========================================================================
 // 1. INPUT PARAMETERS & TIMEFRAME ADAPTATION CONFIGURATION
@@ -31,6 +31,11 @@ enable_struct= input.bool(true, title="Enable Market Structure Engine", group=gp
 enable_smc   = input.bool(true, title="Enable Smart Money Concepts", group=gp_modules)
 enable_volat = input.bool(true, title="Enable Volatility Engine", group=gp_modules)
 enable_mtf   = input.bool(true, title="Enable Multi-Timeframe Alignment", group=gp_modules)
+enable_stoch = input.bool(true, title="Enable Stochastic RSI Engine", group=gp_modules)
+enable_super = input.bool(true, title="Enable Supertrend Engine", group=gp_modules)
+enable_ichim = input.bool(true, title="Enable Ichimoku Cloud Engine", group=gp_modules)
+enable_obv_d = input.bool(true, title="Enable OBV Divergence Engine", group=gp_modules)
+enable_cmf   = input.bool(true, title="Enable Chaikin Money Flow Engine", group=gp_modules)
 
 gp_trend     = "A. TREND QUALITY"
 ema_fast_len = input.int(20, title="Fast EMA Period", group=gp_trend)
@@ -45,6 +50,23 @@ rsi_os       = input.int(30, title="RSI Oversold", group=gp_momentum)
 macd_fast    = input.int(12, title="MACD Fast Period", group=gp_momentum)
 macd_slow    = input.int(26, title="MACD Slow Period", group=gp_momentum)
 macd_signal  = input.int(9, title="MACD Signal Period", group=gp_momentum)
+stoch_k_len  = input.int(14, title="Stochastic RSI K Period", group=gp_momentum)
+stoch_d_len  = input.int(3, title="Stochastic RSI D Period", group=gp_momentum)
+stoch_smooth = input.int(3, title="Stochastic RSI Smooth", group=gp_momentum)
+
+gp_supertrend = "B2. SUPERTREND ENGINE"
+st_factor    = input.float(3.0, title="Supertrend Factor", step=0.1, group=gp_supertrend)
+st_atr_len   = input.int(10, title="Supertrend ATR Period", group=gp_supertrend)
+
+gp_ichimoku  = "B3. ICHIMOKU CLOUD ENGINE"
+ich_tenkan   = input.int(9, title="Tenkan-sen Period", group=gp_ichimoku)
+ich_kijun    = input.int(26, title="Kijun-sen Period", group=gp_ichimoku)
+ich_senkou_b = input.int(52, title="Senkou Span B Period", group=gp_ichimoku)
+ich_displace = input.int(26, title="Cloud Displacement", group=gp_ichimoku)
+show_ichimoku = input.bool(true, title="Show Ichimoku Cloud Overlay", group=gp_ichimoku)
+
+gp_cmf_input = "B4. CHAIKIN MONEY FLOW"
+cmf_len      = input.int(20, title="CMF Period", group=gp_cmf_input)
 
 gp_structure = "C. MARKET STRUCTURE"
 pivot_len    = input.int(5, title="Swing Pivot Lookback", minval=2, group=gp_structure)
@@ -229,6 +251,92 @@ plot(show_vwap_sd ? vwap_lower_1 : na, title="VWAP -1σ", color=color.new(#3b82f
 plot(kama, title="Adaptive KAMA", color=color.new(#ec4899, 0), linewidth=1, display=display.pane)
 
 // =========================================================================
+// 4.5 STOCHASTIC RSI ENGINE
+// =========================================================================
+float stoch_rsi_raw = ta.rsi(close, stoch_k_len)
+float stoch_k_raw = ta.sma(ta.stoch(stoch_rsi_raw, stoch_rsi_raw, stoch_rsi_raw, stoch_k_len), stoch_smooth)
+float stoch_d_raw = ta.sma(stoch_k_raw, stoch_d_len)
+bool stoch_bull_cross = ta.crossover(stoch_k_raw, stoch_d_raw) and stoch_k_raw < 30
+bool stoch_bear_cross = ta.crossunder(stoch_k_raw, stoch_d_raw) and stoch_k_raw > 70
+bool stoch_bullish = stoch_k_raw > stoch_d_raw and stoch_k_raw < 80
+bool stoch_bearish = stoch_k_raw < stoch_d_raw and stoch_k_raw > 20
+string stoch_status = stoch_bull_cross ? "⬆️ Bullish Cross (Oversold)" : stoch_bear_cross ? "⬇️ Bearish Cross (Overbought)" : stoch_bullish ? "Bullish ↑" : stoch_bearish ? "Bearish ↓" : "Neutral"
+color stoch_color = stoch_bull_cross ? color.lime : stoch_bear_cross ? color.red : stoch_bullish ? color.green : stoch_bearish ? color.red : color.gray
+
+// =========================================================================
+// 4.6 SUPERTREND ENGINE
+// =========================================================================
+[st_value, st_direction] = ta.supertrend(st_factor, st_atr_len)
+bool st_bullish = st_direction < 0
+bool st_bearish = st_direction > 0
+bool st_flip_bull = st_bullish and not st_bullish[1]
+bool st_flip_bear = st_bearish and not st_bearish[1]
+string st_status = st_flip_bull ? "🟢 FRESH BUY FLIP" : st_flip_bear ? "🔴 FRESH SELL FLIP" : st_bullish ? "Bullish (Above ST)" : "Bearish (Below ST)"
+color st_color = st_bullish ? color.green : color.red
+plot(st_value, title="Supertrend Line", color=st_color, linewidth=2, style=plot.style_linebr, display=display.pane)
+
+// =========================================================================
+// 4.7 ICHIMOKU CLOUD ENGINE
+// =========================================================================
+float tenkan_sen = (ta.highest(high, ich_tenkan) + ta.lowest(low, ich_tenkan)) / 2.0
+float kijun_sen = (ta.highest(high, ich_kijun) + ta.lowest(low, ich_kijun)) / 2.0
+float senkou_a = (tenkan_sen + kijun_sen) / 2.0
+float senkou_b = (ta.highest(high, ich_senkou_b) + ta.lowest(low, ich_senkou_b)) / 2.0
+float chikou_span = close
+
+bool price_above_cloud = close > math.max(senkou_a[ich_displace], senkou_b[ich_displace])
+bool price_below_cloud = close < math.min(senkou_a[ich_displace], senkou_b[ich_displace])
+bool price_in_cloud = not price_above_cloud and not price_below_cloud
+bool tk_cross_bull = ta.crossover(tenkan_sen, kijun_sen)
+bool tk_cross_bear = ta.crossunder(tenkan_sen, kijun_sen)
+bool cloud_bullish = senkou_a > senkou_b
+
+string ich_status = price_above_cloud ? (tk_cross_bull ? "🟢 TK Cross ABOVE Cloud" : "Above Cloud (Bullish)") : price_below_cloud ? (tk_cross_bear ? "🔴 TK Cross BELOW Cloud" : "Below Cloud (Bearish)") : "Inside Cloud (Neutral)"
+color ich_color = price_above_cloud ? color.green : price_below_cloud ? color.red : color.orange
+
+plot(show_ichimoku ? tenkan_sen : na, title="Tenkan-sen (Conversion)", color=color.new(#2196F3, 30), linewidth=1, display=display.pane)
+plot(show_ichimoku ? kijun_sen : na, title="Kijun-sen (Base)", color=color.new(#B71C1C, 30), linewidth=1, display=display.pane)
+float sa_plot = show_ichimoku ? senkou_a : na
+float sb_plot = show_ichimoku ? senkou_b : na
+p_senkou_a = plot(sa_plot, title="Senkou Span A", offset=ich_displace, color=color.new(#4CAF50, 70), display=display.pane)
+p_senkou_b = plot(sb_plot, title="Senkou Span B", offset=ich_displace, color=color.new(#F44336, 70), display=display.pane)
+fill(p_senkou_a, p_senkou_b, color=cloud_bullish ? color.new(#4CAF50, 92) : color.new(#F44336, 92), title="Ichimoku Cloud Fill")
+
+// =========================================================================
+// 4.8 OBV (ON-BALANCE VOLUME) DIVERGENCE ENGINE
+// =========================================================================
+float obv_val = ta.obv
+float obv_ema = ta.ema(obv_val, 20)
+bool obv_rising = obv_val > obv_ema
+bool obv_falling = obv_val < obv_ema
+
+// Detect OBV divergence: price makes new high but OBV doesn't (bearish) or price makes new low but OBV doesn't (bullish)
+float price_high_5 = ta.highest(high, 14)
+float price_low_5 = ta.lowest(low, 14)
+float obv_high_5 = ta.highest(obv_val, 14)
+float obv_low_5 = ta.lowest(obv_val, 14)
+
+bool obv_bull_div = close <= price_low_5 * 1.01 and obv_val > obv_low_5 * 1.02  // Price at low but OBV not
+bool obv_bear_div = close >= price_high_5 * 0.99 and obv_val < obv_high_5 * 0.98  // Price at high but OBV not
+
+string obv_status = obv_bull_div ? "🟢 Bullish Divergence!" : obv_bear_div ? "🔴 Bearish Divergence!" : obv_rising ? "Accumulation ↑" : "Distribution ↓"
+color obv_color = obv_bull_div ? color.lime : obv_bear_div ? color.red : obv_rising ? color.green : color.red
+
+// =========================================================================
+// 4.9 CHAIKIN MONEY FLOW (CMF) ENGINE
+// =========================================================================
+float mf_multiplier = candle_range > 0 ? ((close - low) - (high - close)) / candle_range : 0.0
+float mf_volume = mf_multiplier * src_volume
+float cmf_val = ta.sma(mf_volume, cmf_len) / (ta.sma(src_volume, cmf_len) + 0.0001)
+
+bool cmf_bullish = cmf_val > 0.05
+bool cmf_bearish = cmf_val < -0.05
+bool cmf_strong_bull = cmf_val > 0.15
+bool cmf_strong_bear = cmf_val < -0.15
+string cmf_status = cmf_strong_bull ? "🟢 Strong Buying Pressure" : cmf_strong_bear ? "🔴 Strong Selling Pressure" : cmf_bullish ? "Mild Buying ↑" : cmf_bearish ? "Mild Selling ↓" : "Neutral Flow"
+color cmf_color = cmf_strong_bull ? color.lime : cmf_strong_bear ? color.red : cmf_bullish ? color.green : cmf_bearish ? color.red : color.gray
+
+// =========================================================================
 // 5. REGIME DETECTOR
 // =========================================================================
 atr_pct = (close > 0 and not na(atr)) ? (atr / close) * 100 : 0.0
@@ -383,16 +491,21 @@ htf_rsi      = request.security(syminfo.tickerid, resolved_htf, ta.rsi(close, 14
 htf_trend_bullish = htf_ema_fast > htf_sma_slow
 
 // =========================================================================
-// 8. AI CONFLUENCE SCORING ENGINE (WITH GIFT NIFTY OVERNIGHT LEAD)
+// 8. AI CONFLUENCE SCORING ENGINE (WITH ALL NEW INDICATORS)
 // =========================================================================
-float w_trend  = 0.20
-float w_momen  = 0.15
-float w_volum  = is_index ? 0.05 : 0.15
-float w_struct = 0.15
-float w_smc    = 0.15
-float w_volat  = 0.05
-float w_mtf    = 0.10
-float w_gift   = use_gift ? 0.15 : 0.0
+float w_trend  = 0.14
+float w_momen  = 0.10
+float w_volum  = is_index ? 0.03 : 0.10
+float w_struct = 0.10
+float w_smc    = 0.10
+float w_volat  = 0.03
+float w_mtf    = 0.07
+float w_gift   = use_gift ? 0.10 : 0.0
+float w_stoch  = enable_stoch ? 0.07 : 0.0
+float w_super  = enable_super ? 0.08 : 0.0
+float w_ichim  = enable_ichim ? 0.08 : 0.0
+float w_obv_dv = enable_obv_d ? 0.06 : 0.0
+float w_cmf_wt = enable_cmf ? 0.07 : 0.0
 
 // Trend Score (EMA + KAMA Adaptive Confluence)
 float t_score = 0.0
@@ -509,6 +622,53 @@ if (use_gift)
     final_bear := final_bear + (math.max(0.0, -gift_score_val) * w_gift)
     active_weights_sum := active_weights_sum + w_gift
 
+// Stochastic RSI Score
+float stoch_score_val = stoch_bull_cross ? 100.0 : stoch_bear_cross ? -100.0 : stoch_bullish ? 50.0 : stoch_bearish ? -50.0 : 0.0
+if (enable_stoch)
+    final_bull := final_bull + (math.max(0.0, stoch_score_val) * w_stoch)
+    final_bear := final_bear + (math.max(0.0, -stoch_score_val) * w_stoch)
+    active_weights_sum := active_weights_sum + w_stoch
+
+// Supertrend Score
+float super_score_val = st_flip_bull ? 100.0 : st_flip_bear ? -100.0 : st_bullish ? 60.0 : -60.0
+if (enable_super)
+    final_bull := final_bull + (math.max(0.0, super_score_val) * w_super)
+    final_bear := final_bear + (math.max(0.0, -super_score_val) * w_super)
+    active_weights_sum := active_weights_sum + w_super
+
+// Ichimoku Cloud Score
+float ichim_score_val = 0.0
+if (price_above_cloud and cloud_bullish)
+    ichim_score_val := 100.0
+else if (price_above_cloud)
+    ichim_score_val := 60.0
+else if (price_below_cloud and not cloud_bullish)
+    ichim_score_val := -100.0
+else if (price_below_cloud)
+    ichim_score_val := -60.0
+if (tk_cross_bull)
+    ichim_score_val := ichim_score_val + 30.0
+if (tk_cross_bear)
+    ichim_score_val := ichim_score_val - 30.0
+if (enable_ichim)
+    final_bull := final_bull + (math.max(0.0, ichim_score_val) * w_ichim)
+    final_bear := final_bear + (math.max(0.0, -ichim_score_val) * w_ichim)
+    active_weights_sum := active_weights_sum + w_ichim
+
+// OBV Divergence Score
+float obv_score_val = obv_bull_div ? 100.0 : obv_bear_div ? -100.0 : obv_rising ? 40.0 : -40.0
+if (enable_obv_d)
+    final_bull := final_bull + (math.max(0.0, obv_score_val) * w_obv_dv)
+    final_bear := final_bear + (math.max(0.0, -obv_score_val) * w_obv_dv)
+    active_weights_sum := active_weights_sum + w_obv_dv
+
+// Chaikin Money Flow Score
+float cmf_score_val = cmf_strong_bull ? 100.0 : cmf_strong_bear ? -100.0 : cmf_bullish ? 50.0 : cmf_bearish ? -50.0 : 0.0
+if (enable_cmf)
+    final_bull := final_bull + (math.max(0.0, cmf_score_val) * w_cmf_wt)
+    final_bear := final_bear + (math.max(0.0, -cmf_score_val) * w_cmf_wt)
+    active_weights_sum := active_weights_sum + w_cmf_wt
+
 float norm_factor = active_weights_sum > 0 ? active_weights_sum : 1.0
 int bullish_confidence = math.round(final_bull / norm_factor)
 int bearish_confidence = math.round(final_bear / norm_factor)
@@ -554,7 +714,7 @@ else if (exec_sell)
 // =========================================================================
 // 10. MOVABLE INSTITUTIONAL TELEMETRY DISPLAY BOARD
 // =========================================================================
-var table dash = table.new(get_position(dash_pos), 10, 13, border_color=color.new(#1e293b, 0), border_width=1)
+var table dash = table.new(get_position(dash_pos), 10, 18, border_color=color.new(#1e293b, 0), border_width=1)
 
 if (show_dash and barstate.islast)
     table.cell(dash, 0, 0, "ALADDIN ADAPTIVE AI TERMINAL (" + syminfo.ticker + ")", text_color=color.white, bgcolor=color.new(#1e293b, 0), text_size=get_size(dash_size), text_halign=text.align_center)
@@ -587,8 +747,23 @@ if (show_dash and barstate.islast)
     cell_format(dash, 0, 9, "Bearish Prob (PE)", color.white, color.new(#0f172a, 0), dash_size)
     cell_format(dash, 1, 9, str.tostring(bearish_confidence) + "%", color.red, color.new(#0f172a, 0), dash_size)
 
-    cell_format(dash, 0, 10, "F&O Action Call", color.white, color.new(#1e293b, 0), dash_size)
-    cell_format(dash, 1, 10, fo_action, exec_buy ? color.green : exec_sell ? color.red : color.orange, color.new(#1e293b, 0), dash_size)
+    cell_format(dash, 0, 10, "Stochastic RSI", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 10, stoch_status + " (K:" + str.tostring(stoch_k_raw, "#.0") + ")", stoch_color, color.new(#0f172a, 0), dash_size)
+
+    cell_format(dash, 0, 11, "Supertrend", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 11, st_status, st_color, color.new(#0f172a, 0), dash_size)
+
+    cell_format(dash, 0, 12, "Ichimoku Cloud", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 12, ich_status, ich_color, color.new(#0f172a, 0), dash_size)
+
+    cell_format(dash, 0, 13, "OBV Divergence", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 13, obv_status, obv_color, color.new(#0f172a, 0), dash_size)
+
+    cell_format(dash, 0, 14, "Chaikin Money Flow", color.white, color.new(#0f172a, 0), dash_size)
+    cell_format(dash, 1, 14, cmf_status + " (" + str.tostring(cmf_val, "#.###") + ")", cmf_color, color.new(#0f172a, 0), dash_size)
+
+    cell_format(dash, 0, 15, "F&O Action Call", color.white, color.new(#1e293b, 0), dash_size)
+    cell_format(dash, 1, 15, fo_action, exec_buy ? color.green : exec_sell ? color.red : color.orange, color.new(#1e293b, 0), dash_size)
 
 // =========================================================================
 // 11. PLOTS, LABELS, & SIGNAL TARGETS
