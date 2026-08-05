@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Aladdin AI — Indian Stock Analyzer & Breakout Screener</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <div class="popup-header">
+      <div class="brand">
+        <span class="icon">🤖</span>
+        <span class="title">ALADDIN <span>AI</span></span>
+      </div>
+      <div class="subtitle">Indian Market Screener & Zerodha Companion</div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="penny">🚀 Penny Breakouts</button>
+      <button class="tab-btn" data-tab="value">📊 Value Plays</button>
+      <button class="tab-btn" data-tab="search">🔍 Search Stock</button>
+    </div>
+
+    <!-- Tab 1: Penny Stock Breakout Rankings -->
+    <div class="tab-content active" id="tab-penny">
+      <div class="section-title">
+        <span>🏆 Next-Week Penny Stock Breakouts (< ₹100)</span>
+        <button class="btn-refresh" id="btn-refresh-penny">🔄 Refresh</button>
+      </div>
+      <div class="scroll-list" id="penny-list">
+        <div class="loading">Loading sector penny breakout analysis...</div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Value Divergence Screener -->
+    <div class="tab-content" id="tab-value">
+      <div class="section-title">
+        <span>📊 Deep Value Divergence Stocks</span>
+        <button class="btn-refresh" id="btn-refresh-value">🔄 Refresh</button>
+      </div>
+      <div class="scroll-list" id="value-list">
+        <div class="loading">Loading fundamental value laggards...</div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Quick Symbol Search -->
+    <div class="tab-content" id="tab-search">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="e.g. RELIANCE, TATAPOWER, SUZLON" />
+        <button id="btn-search">Analyze</button>
+      </div>
+      <div id="search-results">
+        <div class="empty-state">Enter any NSE stock symbol to calculate AI score and F&O strike targets.</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="popup-footer">
+      <span>Connected to local backend (localhost:5000)</span>
+      <span class="status-dot">● Live</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

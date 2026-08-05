@@ -458,6 +458,92 @@ app.post('/api/broker/order', (req, res) => {
   }
 });
 
+/**
+ * Route: GET /api/screener/penny-breakout
+ * Returns latest sector-wide penny stock breakout analysis
+ */
+app.get('/api/screener/penny-breakout', async (req, res) => {
+  try {
+    const reportPath = path.join(process.cwd(), 'scratch', 'penny_breakout_scanner_results.json');
+    if (fs.existsSync(reportPath)) {
+      const data = fs.readFileSync(reportPath, 'utf8');
+      const parsed = JSON.parse(data);
+      return res.json({ success: true, report: parsed });
+    }
+    res.status(444).json({ success: false, error: 'Screener cache not found. Please run penny breakout scanner script.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Route: POST /api/stock/batch-intelligence
+ * Body: { symbols: ['RELIANCE', 'SUZLON', 'TATAPOWER'] }
+ * Returns batch AI intelligence scores for Zerodha watchlist scan
+ */
+app.post('/api/stock/batch-intelligence', async (req, res) => {
+  const { symbols = [] } = req.body;
+  if (!Array.isArray(symbols) || symbols.length === 0) {
+    return res.status(400).json({ success: false, error: 'symbols array is required' });
+  }
+
+  // Limit batch size to 30 to prevent server overload
+  const targetSymbols = symbols.slice(0, 30);
+  
+  try {
+    const globalMacro = await fetchGlobalIndicators();
+    
+    const results = await Promise.all(targetSymbols.map(async (sym) => {
+      try {
+        const rawCandles = await fetchStockData(sym, '1d', 1);
+        if (!rawCandles || rawCandles.length === 0) return { symbol: sym, success: false };
+        
+        const enrichedCandles = enrichWithIndicators(rawCandles);
+        const patternedCandles = detectPatterns(enrichedCandles);
+        const signaledCandles = generateSignals(patternedCandles, { newsSentimentScore: 50 });
+        
+        const latestCandle = signaledCandles[signaledCandles.length - 1];
+        let label = 'HOLD';
+        if (latestCandle.score >= 75) label = 'STRONG BUY';
+        else if (latestCandle.score >= 60) label = 'BUY';
+        else if (latestCandle.score <= 25) label = 'STRONG SELL';
+        else if (latestCandle.score <= 40) label = 'SELL';
+
+        const predictiveTrend = calculatePredictiveTrend(sym, {
+          unifiedScore: latestCandle.score,
+          recommendation: label,
+          price: latestCandle.close
+        }, globalMacro);
+
+        return {
+          symbol: sym.toUpperCase().replace('.NS', '').replace('.BO', ''),
+          fullSymbol: sym,
+          success: true,
+          price: latestCandle.close,
+          score: latestCandle.score,
+          recommendation: label,
+          predictiveTrend: predictiveTrend ? predictiveTrend.trendDirection : 'NEUTRAL',
+          predictedGainPct: predictiveTrend ? predictiveTrend.projectedReturnPct : 0
+        };
+      } catch {
+        return { symbol: sym, success: false };
+      }
+    }));
+
+    const valid = results.filter(r => r.success);
+    valid.sort((a, b) => b.score - a.score);
+
+    res.json({
+      success: true,
+      scannedCount: targetSymbols.length,
+      results: valid
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
